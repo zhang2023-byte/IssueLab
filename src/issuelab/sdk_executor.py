@@ -348,6 +348,53 @@ async def run_observer(issue_number: int, issue_title: str = "", issue_body: str
     return parse_observer_response(response, issue_number)
 
 
+async def run_observer_batch(issue_data_list: list[dict]) -> list[dict]:
+    """并行运行 Observer Agent 分析多个 Issues
+
+    Args:
+        issue_data_list: Issue 数据列表，每个元素包含:
+            {
+                "issue_number": int,
+                "issue_title": str,
+                "issue_body": str,
+                "comments": str,
+            }
+
+    Returns:
+        分析结果列表，每个元素包含 issue_number 和决策结果
+    """
+    logger.info(f"开始并行分析 {len(issue_data_list)} 个 Issues")
+    
+    results = []
+    async with anyio.create_task_group() as tg:
+
+        async def analyze_one(issue_data: dict):
+            issue_number = issue_data["issue_number"]
+            try:
+                result = await run_observer(
+                    issue_number=issue_number,
+                    issue_title=issue_data.get("issue_title", ""),
+                    issue_body=issue_data.get("issue_body", ""),
+                    comments=issue_data.get("comments", ""),
+                )
+                result["issue_number"] = issue_number
+                results.append(result)
+                logger.info(f"Issue #{issue_number} 分析完成: should_trigger={result.get('should_trigger')}")
+            except Exception as e:
+                logger.error(f"Issue #{issue_number} 分析失败: {e}", exc_info=True)
+                results.append({
+                    "issue_number": issue_number,
+                    "should_trigger": False,
+                    "error": str(e),
+                })
+
+        for issue_data in issue_data_list:
+            tg.start_soon(analyze_one, issue_data)
+
+    logger.info(f"并行分析完成，总计 {len(results)} 个结果")
+    return results
+
+
 def parse_observer_response(response: str, issue_number: int) -> dict:
     """解析 Observer Agent 的响应
 

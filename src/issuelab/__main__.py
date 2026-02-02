@@ -8,7 +8,13 @@ import tempfile
 from pathlib import Path
 
 from issuelab.logging_config import get_logger, setup_logging
-from issuelab.sdk_executor import discover_agents, get_agent_matrix_markdown, run_agents_parallel, run_observer
+from issuelab.sdk_executor import (
+    discover_agents,
+    get_agent_matrix_markdown,
+    run_agents_parallel,
+    run_observer,
+    run_observer_batch,
+)
 
 # 评论最大长度 (GitHub 限制 65536，实际使用 10000 留余量)
 MAX_COMMENT_LENGTH = 10000
@@ -102,6 +108,11 @@ def main():
     observe_parser.add_argument("--comment-count", type=int, default=0, help="评论数量")
     observe_parser.add_argument("--post", action="store_true", help="自动发布触发评论到 Issue")
 
+    # Observer 批量分析命令（并行）
+    observe_batch_parser = subparsers.add_parser("observe-batch", help="并行分析多个 Issues")
+    observe_batch_parser.add_argument("--issues", type=str, required=True, help="Issue 编号列表（逗号分隔）")
+    observe_batch_parser.add_argument("--post", action="store_true", help="自动发布触发评论到 Issue")
+
     # 列出所有可用 Agent
     subparsers.add_parser("list-agents", help="列出所有可用的 Agent")
 
@@ -179,6 +190,90 @@ def main():
                     print("\n❌ Failed to post trigger comment")
         else:
             print(f"Skip Reason: {result.get('reason', 'N/A')}")
+
+    elif args.command == "observe-batch":
+        # 并行分析多个 Issues
+        issue_numbers = [int(i.strip()) for i in args.issues.split(",") if i.strip()]
+        
+        if not issue_numbers:
+            print("❌ 未提供有效的 Issue 编号")
+            return
+        
+        print(f"\n=== 并行分析 {len(issue_numbers)} 个 Issues ===")
+        
+        # 获取所有 Issues 的详情
+        issue_data_list = []
+        for issue_num in issue_numbers:
+            try:
+                # 使用 gh 命令获取 Issue 详情
+                result = subprocess.run(
+                    ["gh", "issue", "view", str(issue_num), "--json", "title,body,comments"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                import json
+                data = json.loads(result.stdout)
+                
+                # 格式化评论
+                comments = []
+                for comment in data.get("comments", []):
+                    author = comment.get("author", {}).get("login", "unknown")
+                    body = comment.get("body", "")
+                    comments.append(f"- **[{author}]**: {body}")
+                
+                issue_data_list.append({
+                    "issue_number": issue_num,
+                    "issue_title": data.get("title", ""),
+                    "issue_body": data.get("body", ""),
+                    "comments": "\n".join(comments),
+                })
+            except Exception as e:
+                print(f"⚠️  获取 Issue #{issue_num} 失败: {e}")
+                continue
+        
+        if not issue_data_list:
+            print("❌ 无有效的 Issue 数据")
+            return
+        
+        # 并行分析
+        from issuelab.sdk_executor import run_observer_batch
+        results = asyncio.run(run_observer_batch(issue_data_list))
+        
+        # 输出结果
+        print(f"\n{'='*60}")
+        print(f"分析完成：{len(results)} 个 Issues")
+        print(f"{'='*60}\n")
+        
+        triggered_count = 0
+        for result in results:
+            issue_num = result.get("issue_number")
+            should_trigger = result.get("should_trigger", False)
+            
+            print(f"Issue #{issue_num}:")
+            print(f"  触发: {'✅ 是' if should_trigger else '❌ 否'}")
+            
+            if should_trigger:
+                triggered_count += 1
+                print(f"  Agent: {result.get('agent', 'N/A')}")
+                print(f"  理由: {result.get('reason', 'N/A')}")
+                
+                # 如果需要，自动发布触发评论
+                if getattr(args, "post", False):
+                    comment = result.get("comment")
+                    if comment and post_comment(issue_num, comment):
+                        print(f"  ✅ 已发布触发评论")
+                    else:
+                        print(f"  ❌ 发布评论失败")
+            else:
+                print(f"  原因: {result.get('reason', 'N/A')}")
+            
+            if "error" in result:
+                print(f"  ⚠️  错误: {result['error']}")
+            
+            print()
+        
+        print(f"\n总结: {triggered_count}/{len(results)} 个 Issues 需要触发 Agent")
 
     elif args.command == "list-agents":
         # 列出所有可用的 Agent

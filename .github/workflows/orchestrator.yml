@@ -37,8 +37,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Install arxiv-mcp-server
-        run: uv tool install arxiv-mcp-server
+      # 暂时禁用 MCP 安装以测试性能
+      # - name: Install arxiv-mcp-server
+      #   run: uv tool install arxiv-mcp-server
 
       - name: Get Issue content
         id: get_issue
@@ -102,8 +103,8 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: true
-          ENABLE_GITHUB_MCP: true
+          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
 
   # ========== @mention 触发（并行执行） ==========
   process-mention:
@@ -124,8 +125,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Install arxiv-mcp-server
-        run: uv tool install arxiv-mcp-server
+      # 暂时禁用 MCP 安装以测试性能
+      # - name: Install arxiv-mcp-server
+      #   run: uv tool install arxiv-mcp-server
 
       - name: Parse @mentions
         id: parse
@@ -192,8 +194,8 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: true
-          ENABLE_GITHUB_MCP: true
+          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
 
   # ========== /command 触发（顺序执行） ==========
   process-command:
@@ -218,8 +220,9 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Install arxiv-mcp-server
-        run: uv tool install arxiv-mcp-server
+      # 暂时禁用 MCP 安装以测试性能
+      # - name: Install arxiv-mcp-server
+      #   run: uv tool install arxiv-mcp-server
 
       - name: Extract command
         id: extract
@@ -296,8 +299,8 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: true
-          ENABLE_GITHUB_MCP: true
+          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
 
       # 处理 /review 命令：运行完整评审流程
       - name: Run review process
@@ -328,8 +331,8 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: true
-          ENABLE_GITHUB_MCP: true
+          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
 
       # 处理 /summarize 命令
       - name: Run summarizer
@@ -349,5 +352,5 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: true
-          ENABLE_GITHUB_MCP: true
+          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
