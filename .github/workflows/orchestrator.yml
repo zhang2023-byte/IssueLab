@@ -103,7 +103,7 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_ARXIV_MCP: true  # 暂时关闭以测试性能
           ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
 
   # ========== @mention 触发（并行执行） ==========
@@ -194,7 +194,7 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_ARXIV_MCP: true  # 暂时关闭以测试性能
           ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
 
   # ========== /command 触发（顺序执行） ==========
@@ -299,7 +299,7 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_ARXIV_MCP: true  # 暂时关闭以测试性能
           ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
 
       # 处理 /review 命令：运行完整评审流程
@@ -331,7 +331,7 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_ARXIV_MCP: true  # 暂时关闭以测试性能
           ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
 
       # 处理 /summarize 命令
@@ -352,5 +352,5 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: false  # 暂时关闭以测试性能
+          ENABLE_ARXIV_MCP: true  # 暂时关闭以测试性能
           ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能

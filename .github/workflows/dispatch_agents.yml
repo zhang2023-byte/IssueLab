@@ -52,7 +52,7 @@ jobs:
 
       - name: Dispatch to user repositories
         env:
-          GITHUB_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mentions="${{ steps.parse_issue.outputs.mentions || steps.parse_comment.outputs.mentions }}"
 
