@@ -2,6 +2,7 @@
 import re
 import anyio
 import os
+import logging
 from pathlib import Path
 from typing import Optional
 from claude_agent_sdk import (
@@ -9,6 +10,10 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     AgentDefinition,
 )
+from issuelab.retry import retry_async
+from issuelab.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # 提示词目录
 PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
@@ -142,7 +147,7 @@ def load_prompt(agent_name: str) -> str:
 def create_agent_options() -> ClaudeAgentOptions:
     """创建包含所有评审代理的配置（动态发现）"""
     # 从环境变量读取配置
-    api_key = os.environ.get("ANTHROPIC_AUTH_KEY") or os.environ.get("ANTHROPIC_API_KEY", "")
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     base_url = os.environ.get("ANTHROPIC_BASE_URL", "")
     model = os.environ.get("ANTHROPIC_MODEL", "sonnet")
 
@@ -176,9 +181,27 @@ def create_agent_options() -> ClaudeAgentOptions:
             "env": env.copy(),
         })
 
+    # GitHub MCP 服务器配置
+    if os.environ.get("ENABLE_GITHUB_MCP", "true").lower() == "true":
+        mcp_servers.append({
+            "name": "github-mcp-server",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
+            "env": env.copy(),
+        })
+
     # 动态获取所有 Agent（排除 observer，它不能自己触发自己）
     agents = discover_agents()
     arxiv_tools = ["search_papers", "download_paper", "read_paper", "list_papers"]
+    # GitHub 工具 - 用于搜索开源实现、查看代码仓库
+    github_tools = [
+        "search_repositories",  # 搜索仓库
+        "get_file_contents",    # 读取文件
+        "list_commits",         # 查看提交历史
+        "search_code",          # 搜索代码
+        "get_issue",            # 获取 Issue
+    ]
+    all_tools = ["Read", "Write", "Bash"] + arxiv_tools + github_tools
 
     agent_definitions = {}
     for name, config in agents.items():
@@ -187,7 +210,7 @@ def create_agent_options() -> ClaudeAgentOptions:
         agent_definitions[name] = AgentDefinition(
             description=config["description"],
             prompt=config["prompt"],
-            tools=["Read", "Write", "Bash"] + arxiv_tools,
+            tools=all_tools,
             model=model,
         )
 
@@ -200,7 +223,7 @@ def create_agent_options() -> ClaudeAgentOptions:
 
 
 async def run_single_agent(prompt: str, agent_name: str) -> str:
-    """运行单个代理
+    """运行单个代理（带重试机制）
 
     Args:
         prompt: 用户提示词
@@ -209,21 +232,36 @@ async def run_single_agent(prompt: str, agent_name: str) -> str:
     Returns:
         代理响应文本
     """
-    options = create_agent_options()
+    logger.info(f"开始运行 agent: {agent_name}")
+    
+    async def _query_agent():
+        options = create_agent_options()
+        response_text = []
 
-    response_text = []
+        async for message in query(
+            prompt=prompt,
+            options=options,
+        ):
+            from claude_agent_sdk import AssistantMessage, TextBlock
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        response_text.append(block.text)
 
-    async for message in query(
-        prompt=prompt,
-        options=options,
-    ):
-        from claude_agent_sdk import AssistantMessage, TextBlock
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    response_text.append(block.text)
-
-    return "\n".join(response_text)
+        result = "\n".join(response_text)
+        logger.info(f"Agent {agent_name} 响应完成，长度: {len(result)} 字符")
+        return result
+    
+    try:
+        return await retry_async(
+            _query_agent,
+            max_retries=3,
+            initial_delay=2.0,
+            backoff_factor=2.0
+        )
+    except Exception as e:
+        logger.error(f"Agent {agent_name} 运行失败: {e}", exc_info=True)
+        return f"[错误] Agent {agent_name} 执行失败: {e}"
 
 
 async def run_agents_parallel(issue_number: int, agents: list[str], context: str = "", comment_count: int = 0) -> dict:

@@ -2,10 +2,17 @@
 import subprocess
 import json
 import os
+import logging
+from issuelab.retry import retry_sync
+from issuelab.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
+@retry_sync(max_retries=3, initial_delay=1.0, backoff_factor=2.0)
 def get_issue_info(issue_number: int) -> dict:
-    """获取 Issue 信息"""
+    """获取 Issue 信息（带重试机制）"""
+    logger.debug(f"获取 Issue #{issue_number} 信息")
     # 优先使用 GH_TOKEN，fallback 到 GITHUB_TOKEN
     env = os.environ.copy()
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -17,7 +24,8 @@ def get_issue_info(issue_number: int) -> dict:
         env=env
     )
     if result.returncode != 0:
-        return {"error": result.stderr}
+        logger.error(f"获取 Issue #{issue_number} 失败: {result.stderr}")
+        raise RuntimeError(f"Failed to get issue info: {result.stderr}")
     return json.loads(result.stdout)
 
 

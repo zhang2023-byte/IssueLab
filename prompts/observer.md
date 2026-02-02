@@ -1,7 +1,7 @@
 ---
 agent: observer
 description: 监控代理 - 监控 Issues，自主决定是否触发评审
-trigger_conditions: []
+trigger_conditions:
 ---
 # Observer Agent - Issue 自主监控与触发
 
