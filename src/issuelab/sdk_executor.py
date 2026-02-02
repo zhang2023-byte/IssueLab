@@ -11,6 +11,7 @@ from claude_agent_sdk import (
     query,
 )
 
+from issuelab.config import Config
 from issuelab.logging_config import get_logger
 from issuelab.retry import retry_async
 
@@ -18,6 +19,7 @@ logger = get_logger(__name__)
 
 # 提示词目录
 PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+AGENTS_DIR = Path(__file__).parent.parent.parent / "agents"
 
 
 def parse_agent_metadata(content: str) -> dict | None:
@@ -99,6 +101,7 @@ def discover_agents() -> dict:
     if not PROMPTS_DIR.exists():
         return agents
 
+    # 扫描 prompts 目录下的 .md 文件
     for prompt_file in PROMPTS_DIR.glob("*.md"):
         content = prompt_file.read_text()
         metadata = parse_agent_metadata(content)
@@ -113,6 +116,42 @@ def discover_agents() -> dict:
                 "prompt": clean_content,
                 "trigger_conditions": metadata.get("trigger_conditions", []),
             }
+
+    # 扫描 agents 目录下的 prompt.md 文件
+    if AGENTS_DIR.exists():
+        for agent_dir in AGENTS_DIR.iterdir():
+            if not agent_dir.is_dir() or agent_dir.name.startswith("_"):
+                continue
+
+            prompt_file = agent_dir / "prompt.md"
+            if prompt_file.exists():
+                content = prompt_file.read_text()
+                metadata = parse_agent_metadata(content)
+
+                if metadata and "agent" in metadata:
+                    # 优先使用 metadata 中的 agent 名，通常应该与目录名（用户 handle）一致
+                    agent_name = metadata["agent"]
+
+                    # 如果 metadata 中的名叫 gqy22-reviewer，但目录名叫 gqy22
+                    # 为了兼容 @mention (解析出来是 gqy22)，我们可能需要同时也注册一个 gqy22 的别名
+                    # 但在这里我们暂时信任 metadata 中的名字，或者也可以强制使用目录名
+                    # 这里尝试一个回退策略：如果 URL/CLI 使用的是目录名，但也注册此 agent
+
+                    # 移除 frontmatter
+                    clean_content = re.sub(r"^---\n.*?\n---\n", "", content, flags=re.DOTALL).strip()
+
+                    agent_data = {
+                        "description": metadata.get("description", ""),
+                        "prompt": clean_content,
+                        "trigger_conditions": metadata.get("trigger_conditions", []),
+                    }
+
+                    agents[agent_name] = agent_data
+
+                    # 如果目录名与 agent_name 不同，也注册别名（指向同一个配置）
+                    # 这样 @gqy22 (目录名) 也能找到 agent: gqy22-reviewer
+                    if agent_dir.name != agent_name:
+                        agents[agent_dir.name] = agent_data
 
     return agents
 
@@ -147,36 +186,20 @@ def load_prompt(agent_name: str) -> str:
 
 def create_agent_options() -> ClaudeAgentOptions:
     """创建包含所有评审代理的配置（动态发现）"""
-    # 从环境变量读取配置
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    base_url = os.environ.get("ANTHROPIC_BASE_URL", "")
-    model = os.environ.get("ANTHROPIC_MODEL", "sonnet")
-
-    # 构建环境变量字典传给 SDK
-    env = {}
-    if api_key:
-        env["ANTHROPIC_API_KEY"] = api_key
-    if base_url:
-        env["ANTHROPIC_BASE_URL"] = base_url
-    if model:
-        env["ANTHROPIC_MODEL"] = model
-
-    # arxiv MCP 存储路径
-    arxiv_storage_path = os.environ.get("ARXIV_STORAGE_PATH", str(Path.home() / ".arxiv-mcp-server" / "papers"))
+    # 从配置模块获取环境变量
+    env = Config.get_anthropic_env()
+    arxiv_storage_path = Config.get_arxiv_storage_path()
 
     # MCP 服务器配置
     mcp_servers = []
-    if os.environ.get("ENABLE_ARXIV_MCP", "true").lower() == "true":
+    if Config.is_arxiv_mcp_enabled():
+        # 使用预安装的 arxiv-mcp-server (通过 uv tool install 安装)
+        # 而不是 uv tool run（每次都重新安装，导致超时）
         mcp_servers.append(
             {
                 "name": "arxiv-mcp-server",
-                "command": "uv",
+                "command": "arxiv-mcp-server",  # 直接使用已安装的命令
                 "args": [
-                    "--directory",
-                    str(Path(__file__).parent.parent.parent),
-                    "tool",
-                    "run",
-                    "arxiv-mcp-server",
                     "--storage-path",
                     arxiv_storage_path,
                 ],
@@ -185,7 +208,7 @@ def create_agent_options() -> ClaudeAgentOptions:
         )
 
     # GitHub MCP 服务器配置
-    if os.environ.get("ENABLE_GITHUB_MCP", "true").lower() == "true":
+    if Config.is_github_mcp_enabled():
         mcp_servers.append(
             {
                 "name": "github-mcp-server",
@@ -217,6 +240,9 @@ def create_agent_options() -> ClaudeAgentOptions:
         ]
 
     all_tools = base_tools + arxiv_tools + github_tools
+
+    # 获取模型配置
+    model = Config.get_anthropic_model()
 
     agent_definitions = {}
     for name, config in agents.items():
@@ -276,7 +302,9 @@ async def run_single_agent(prompt: str, agent_name: str) -> str:
 
 
 async def run_agents_parallel(issue_number: int, agents: list[str], context: str = "", comment_count: int = 0) -> dict:
-    """并行运行多个代理
+    """串行运行多个代理（函数名保持向后兼容）
+
+    注意：虽然函数名为 parallel，但实际改为串行执行以避免 Claude Agent SDK 的资源竞争问题。
 
     Args:
         issue_number: Issue 编号
@@ -299,15 +327,13 @@ async def run_agents_parallel(issue_number: int, agents: list[str], context: str
 请以 [Agent: {{agent_name}}] 为前缀发布你的回复。"""
 
     results = {}
-    async with anyio.create_task_group() as tg:
 
-        async def run_and_store(agent_name: str):
-            prompt = base_prompt.format(agent_name=agent_name)
-            response = await run_single_agent(prompt, agent_name)
-            results[agent_name] = response
-
-        for agent in agents:
-            tg.start_soon(run_and_store, agent)
+    # 串行执行以避免 Claude Agent SDK 资源竞争
+    for agent in agents:
+        prompt = base_prompt.format(agent_name=agent)
+        logger.info(f"串行执行 agent: {agent} ({agents.index(agent) + 1}/{len(agents)})")
+        response = await run_single_agent(prompt, agent)
+        results[agent] = response
 
     return results
 

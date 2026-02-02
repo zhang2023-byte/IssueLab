@@ -61,7 +61,7 @@ def test_workflow_uses_correct_secrets():
     content = workflow_path.read_text()
 
     # 检查用户配置的 Secret
-    assert "ANTHROPIC_API_KEY" in content, "Workflow should use ANTHROPIC_API_KEY secret"
+    assert "ANTHROPIC_AUTH_KEY" in content, "Workflow should use ANTHROPIC_AUTH_KEY secret"
     assert "ANTHROPIC_BASE_URL" in content, "Workflow should use ANTHROPIC_BASE_URL secret"
     assert "ANTHROPIC_MODEL" in content, "Workflow should use ANTHROPIC_MODEL secret"
 

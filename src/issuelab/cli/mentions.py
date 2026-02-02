@@ -1,7 +1,10 @@
 """
-解析 Issue/Comment 中的 @mentions
+解析 Issue/Comment 中的 @mentions (GitHub 用户名)
 
-提取可复用的 mention 解析逻辑。
+用于跨仓库触发：提取 GitHub 用户名用于分发到用户仓库
+与 issuelab.parser 的区别：
+- parser.py: 解析 Agent 别名（@mod -> moderator）
+- mentions.py: 解析 GitHub 用户名（@alice, @bob）
 """
 
 import argparse
@@ -11,20 +14,22 @@ import re
 import sys
 
 
-def parse_mentions(text: str) -> list[str]:
+def parse_github_mentions(text: str) -> list[str]:
     """
-    从文本中提取所有 @mentions
+    从文本中提取所有 GitHub @mentions
+
+    用于跨仓库分发，提取真实的 GitHub 用户名
 
     Args:
         text: 要解析的文本
 
     Returns:
-        提取到的用户名列表（不包含 @），去重保持顺序
+        提取到的 GitHub 用户名列表（不包含 @），去重保持顺序
 
     Example:
-        >>> parse_mentions("@alice and @bob, please review")
+        >>> parse_github_mentions("@alice and @bob, please review")
         ['alice', 'bob']
-        >>> parse_mentions("@alice @alice @bob")
+        >>> parse_github_mentions("@alice @alice @bob")
         ['alice', 'bob']
     """
     if not text:
@@ -58,7 +63,8 @@ def write_github_output(mentions: list[str]) -> None:
 
     try:
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-            f.write(f"mentions={json.dumps(mentions)}\n")
+            # 使用逗号分隔格式，避免 shell 引号问题
+            f.write(f"mentions={','.join(mentions)}\n")
             f.write(f"count={len(mentions)}\n")
     except OSError as e:
         print(f"Warning: Failed to write GitHub output: {e}", file=sys.stderr)
@@ -77,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Parse @mentions from GitHub Issue/Comment")
     parser.add_argument("--issue-body", help="Issue body text", default="")
     parser.add_argument("--comment-body", help="Comment body text", default="")
-    parser.add_argument("--output", default="json", choices=["json", "text"], help="Output format (default: json)")
+    parser.add_argument("--output", default="csv", choices=["json", "csv", "text"], help="Output format (default: csv)")
 
     args = parser.parse_args(argv)
 
@@ -88,12 +94,15 @@ def main(argv: list[str] | None = None) -> int:
         print("Error: No text provided", file=sys.stderr)
         return 1
 
-    # 解析 mentions
-    mentions = parse_mentions(text)
+    # 解析 mentions（使用新的函数名）
+    mentions = parse_github_mentions(text)
 
     # 输出
     if args.output == "json":
         print(json.dumps({"mentions": mentions, "count": len(mentions)}))
+    elif args.output == "csv":
+        # 逗号分隔格式，适合 shell 使用
+        print(",".join(mentions))
     else:  # text
         for mention in mentions:
             print(mention)

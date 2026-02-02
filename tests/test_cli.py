@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from issuelab.cli.mentions import parse_mentions
+from issuelab.cli.mentions import parse_github_mentions
 
 
 class TestParseMentions:
@@ -13,44 +13,44 @@ class TestParseMentions:
     def test_single_mention(self):
         """Test parsing single mention."""
         text = "@alice please review"
-        mentions = parse_mentions(text)
+        mentions = parse_github_mentions(text)
         assert mentions == ["alice"]
 
     def test_multiple_mentions(self):
         """Test parsing multiple mentions."""
         text = "@alice @bob @charlie"
-        mentions = parse_mentions(text)
+        mentions = parse_github_mentions(text)
         assert mentions == ["alice", "bob", "charlie"]
 
     def test_duplicate_mentions(self):
         """Test deduplication."""
         text = "@alice @bob @alice @charlie @bob"
-        mentions = parse_mentions(text)
+        mentions = parse_github_mentions(text)
         assert mentions == ["alice", "bob", "charlie"]
 
     def test_mention_with_hyphens(self):
         """Test usernames with hyphens."""
         text = "@user-name @test-user-123"
-        mentions = parse_mentions(text)
+        mentions = parse_github_mentions(text)
         assert mentions == ["user-name", "test-user-123"]
 
     def test_invalid_mentions(self):
         """Test invalid mention patterns."""
         text = "@-invalid @invalid- @123"
-        mentions = parse_mentions(text)
+        mentions = parse_github_mentions(text)
         # 正则会匹配 @-invalid 的 invalid 和 @123 的 123
         # GitHub 的实际行为也是这样的
         assert mentions == ["invalid", "123"]
 
     def test_empty_text(self):
         """Test empty input."""
-        assert parse_mentions("") == []
-        assert parse_mentions(None) == []
+        assert parse_github_mentions("") == []
+        assert parse_github_mentions(None) == []
 
     def test_no_mentions(self):
         """Test text without mentions."""
         text = "This is a normal text without any mentions"
-        mentions = parse_mentions(text)
+        mentions = parse_github_mentions(text)
         assert mentions == []
 
     def test_mention_in_markdown(self):
@@ -67,7 +67,7 @@ class TestParseMentions:
 
         cc @charlie
         """
-        mentions = parse_mentions(text)
+        mentions = parse_github_mentions(text)
         assert "alice" in mentions
         assert "bob" in mentions
         assert "charlie" in mentions
@@ -76,11 +76,21 @@ class TestParseMentions:
 class TestMentionsCLI:
     """Tests for mentions CLI."""
 
+    def test_cli_csv_output(self, capsys):
+        """Test CSV output format (default)."""
+        from issuelab.cli.mentions import main
+
+        result = main(["--issue-body", "@alice @bob"])
+        assert result == 0
+
+        captured = capsys.readouterr()
+        assert captured.out.strip() == "alice,bob"
+
     def test_cli_json_output(self, capsys):
         """Test JSON output format."""
         from issuelab.cli.mentions import main
 
-        result = main(["--issue-body", "@alice @bob"])
+        result = main(["--issue-body", "@alice @bob", "--output", "json"])
         assert result == 0
 
         captured = capsys.readouterr()
@@ -108,6 +118,45 @@ class TestMentionsCLI:
 
         captured = capsys.readouterr()
         assert "Error" in captured.err
+
+
+class TestParseAgentsArg:
+    """Tests for parse_agents_arg function."""
+
+    def test_comma_separated(self):
+        """Test comma-separated format."""
+        from issuelab.__main__ import parse_agents_arg
+
+        result = parse_agents_arg("echo,test,moderator")
+        assert result == ["echo", "test", "moderator"]
+
+    def test_space_separated(self):
+        """Test space-separated format."""
+        from issuelab.__main__ import parse_agents_arg
+
+        result = parse_agents_arg("echo test moderator")
+        assert result == ["echo", "test", "moderator"]
+
+    def test_json_array(self):
+        """Test JSON array format."""
+        from issuelab.__main__ import parse_agents_arg
+
+        result = parse_agents_arg('["echo", "test"]')
+        assert result == ["echo", "test"]
+
+    def test_mixed_case(self):
+        """Test that results are lowercased."""
+        from issuelab.__main__ import parse_agents_arg
+
+        result = parse_agents_arg("Echo,TEST,Moderator")
+        assert result == ["echo", "test", "moderator"]
+
+    def test_whitespace_handling(self):
+        """Test whitespace is trimmed."""
+        from issuelab.__main__ import parse_agents_arg
+
+        result = parse_agents_arg("  echo , test , moderator  ")
+        assert result == ["echo", "test", "moderator"]
 
 
 class TestDispatch:
@@ -189,3 +238,65 @@ enabled: false
         matched = match_triggers(["bob-cv"], registry)
         assert len(matched) == 1
         assert matched[0]["username"] == "bob"
+
+
+class TestDispatchCLI:
+    """Tests for dispatch CLI mention parsing."""
+
+    def test_parse_json_mentions(self, monkeypatch):
+        """Test parsing JSON format mentions."""
+        from issuelab.cli.dispatch import main
+
+        # Mock environment
+        monkeypatch.setenv("GITHUB_TOKEN", "fake_token")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create empty registry
+            registry_dir = Path(tmpdir)
+            registry_dir.mkdir(exist_ok=True)
+
+            # Should handle JSON format
+            result = main(
+                [
+                    "--mentions",
+                    '["alice", "bob"]',
+                    "--registry-dir",
+                    str(registry_dir),
+                    "--source-repo",
+                    "test/repo",
+                    "--issue-number",
+                    "1",
+                ]
+            )
+
+            # Returns 0 even with no matches (no agents to dispatch to)
+            assert result == 0
+
+    def test_parse_csv_mentions(self, monkeypatch):
+        """Test parsing CSV format mentions."""
+        from issuelab.cli.dispatch import main
+
+        # Mock environment
+        monkeypatch.setenv("GITHUB_TOKEN", "fake_token")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create empty registry
+            registry_dir = Path(tmpdir)
+            registry_dir.mkdir(exist_ok=True)
+
+            # Should handle CSV format
+            result = main(
+                [
+                    "--mentions",
+                    "alice,bob",
+                    "--registry-dir",
+                    str(registry_dir),
+                    "--source-repo",
+                    "test/repo",
+                    "--issue-number",
+                    "1",
+                ]
+            )
+
+            # Returns 0 even with no matches (no agents to dispatch to)
+            assert result == 0

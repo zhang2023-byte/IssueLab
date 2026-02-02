@@ -2,11 +2,10 @@
 
 import argparse
 import asyncio
-import os
+import json
 import subprocess
-import tempfile
-from pathlib import Path
 
+from issuelab.config import Config
 from issuelab.logging_config import get_logger, setup_logging
 from issuelab.sdk_executor import (
     discover_agents,
@@ -14,97 +13,62 @@ from issuelab.sdk_executor import (
     run_agents_parallel,
     run_observer,
 )
-
-# 评论最大长度 (GitHub 限制 65536，实际使用 10000 留余量)
-MAX_COMMENT_LENGTH = 10000
+from issuelab.tools.github import get_issue_info, post_comment
 
 # 初始化日志
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-log_file = os.environ.get("LOG_FILE")
-log_file_path = Path(log_file) if log_file else None
-setup_logging(level=log_level, log_file=log_file_path)
+setup_logging(level=Config.get_log_level(), log_file=Config.get_log_file())
 logger = get_logger(__name__)
 
 
-def truncate_text(text: str, max_length: int = MAX_COMMENT_LENGTH) -> str:
-    """截断文本到指定长度，保留完整段落"""
-    suffix = "\n\n_(内容已截断)_"
-    suffix_len = len(suffix)
+def parse_agents_arg(agents_str: str) -> list[str]:
+    """
+    解析 agents 参数，支持多种格式
 
-    if len(text) <= max_length:
-        return text
+    Args:
+        agents_str: agents 字符串，支持:
+            - 逗号分隔: "echo,test"
+            - 空格分隔: "echo test"
+            - JSON 数组: '["echo", "test"]'
 
-    # 预留后缀空间，截断内容部分
-    available = max_length - suffix_len
-    truncated = text[:available]
+    Returns:
+        agent 名称列表（小写）
+    """
+    agents_str = agents_str.strip()
 
-    # 尝试在最后一个完整段落后截断
-    last_newline = truncated.rfind("\n\n")
+    # JSON 数组格式
+    if agents_str.startswith("[") and agents_str.endswith("]"):
+        try:
+            agents = json.loads(agents_str)
+            return [agent.lower() for agent in agents]
+        except json.JSONDecodeError:
+            logger.warning(f"JSON 格式解析失败，尝试其他格式: {agents_str}")
 
-    if last_newline > available * 0.5:  # 保留至少 50% 的内容
-        return truncated[:last_newline].strip() + suffix
+    # 逗号分隔格式（优先）
+    if "," in agents_str:
+        return [a.strip().lower() for a in agents_str.split(",") if a.strip()]
 
-    # 否则直接在字符边界截断
-    return truncated.strip() + suffix
-
-
-def post_comment(issue_number: int, body: str) -> bool:
-    """发布评论到 Issue，自动截断过长内容"""
-    # 截断内容
-    truncated_body = truncate_text(body, MAX_COMMENT_LENGTH)
-
-    # 使用临时文件避免命令行长度限制
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-        f.write(truncated_body)
-        f.flush()
-        # 优先使用 GH_TOKEN，fallback 到 GITHUB_TOKEN
-        env = os.environ.copy()
-        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-        if token:
-            env["GH_TOKEN"] = token
-        result = subprocess.run(
-            ["gh", "issue", "comment", str(issue_number), "--body-file", f.name],
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        os.unlink(f.name)
-
-    if result.returncode != 0:
-        print(f"Error: {result.stderr}")
-    return result.returncode == 0
+    # 空格分隔格式
+    return [a.lower() for a in agents_str.split() if a]
 
 
 def main():
     parser = argparse.ArgumentParser(description="Issue Lab Agent")
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
 
-    # @mention 并行执行
+    # @mention 并行执行（简化版）
     execute_parser = subparsers.add_parser("execute", help="并行执行代理")
-    execute_parser.add_argument("--issue", type=int, required=True)
-    execute_parser.add_argument("--agents", type=str, required=True, help="空格分隔的代理名称")
+    execute_parser.add_argument("--issue", type=int, required=True, help="Issue 编号")
+    execute_parser.add_argument("--agents", type=str, required=True, help="代理名称（逗号分隔）")
     execute_parser.add_argument("--post", action="store_true", help="自动发布结果到 Issue")
-    execute_parser.add_argument("--context", type=str, default="", help="Issue 内容上下文")
-    execute_parser.add_argument("--title", type=str, default="", help="Issue 标题")
-    execute_parser.add_argument("--comments", type=str, default="", help="Issue 所有评论内容")
-    execute_parser.add_argument("--comment-count", type=int, default=0, help="评论数量")
 
-    # 顺序评审流程
+    # 顺序评审流程（简化版）
     review_parser = subparsers.add_parser("review", help="运行顺序评审流程")
-    review_parser.add_argument("--issue", type=int, required=True)
+    review_parser.add_argument("--issue", type=int, required=True, help="Issue 编号")
     review_parser.add_argument("--post", action="store_true", help="自动发布结果到 Issue")
-    review_parser.add_argument("--context", type=str, default="", help="Issue 内容上下文")
-    review_parser.add_argument("--title", type=str, default="", help="Issue 标题")
-    review_parser.add_argument("--comments", type=str, default="", help="Issue 所有评论内容")
-    review_parser.add_argument("--comment-count", type=int, default=0, help="评论数量")
 
-    # Observer 监控命令
+    # Observer 监控命令（简化版）
     observe_parser = subparsers.add_parser("observe", help="运行 Observer Agent 分析 Issue")
     observe_parser.add_argument("--issue", type=int, required=True, help="Issue 编号")
-    observe_parser.add_argument("--context", type=str, default="", help="Issue 内容上下文")
-    observe_parser.add_argument("--title", type=str, default="", help="Issue 标题")
-    observe_parser.add_argument("--comments", type=str, default="", help="Issue 所有评论内容")
-    observe_parser.add_argument("--comment-count", type=int, default=0, help="评论数量")
     observe_parser.add_argument("--post", action="store_true", help="自动发布触发评论到 Issue")
 
     # Observer 批量分析命令（并行）
@@ -117,26 +81,35 @@ def main():
 
     args = parser.parse_args()
 
-    # 根据命令类型处理
-    if args.command == "execute" or args.command == "review" or args.command == "observe":
-        # 构建上下文
-        context = ""
-        if getattr(args, "context", ""):
-            title = getattr(args, "title", "") or ""
-            context = f"**Issue 标题**: {title}\n\n**Issue 内容**:\n{args.context}"
+    # 自动获取 Issue 信息（适用于 execute, review, observe）
+    if args.command in ("execute", "review", "observe"):
+        print(f"📥 正在获取 Issue #{args.issue} 信息...")
+        issue_info = get_issue_info(args.issue, format_comments=True)
 
-        # 如果有评论，添加到上下文
-        comment_count = getattr(args, "comment_count", 0) or 0
-        comments = getattr(args, "comments", "") or ""
+        # 构建上下文
+        context = f"**Issue 标题**: {issue_info['title']}\n\n**Issue 内容**:\n{issue_info['body']}"
+        comment_count = issue_info["comment_count"]
+        comments = issue_info["comments"]
+
         if comment_count > 0 and comments:
             context += f"\n\n**本 Issue 共有 {comment_count} 条历史评论，请仔细阅读并分析：**\n\n{comments}"
+
+        print(f"✅ 已获取: 标题={issue_info['title'][:30]}..., 评论数={comment_count}")
     else:
         context = ""
         comment_count = 0
         comments = ""
+        issue_info = {}
 
     if args.command == "execute":
-        agents = args.agents.split()
+        agents = parse_agents_arg(args.agents)
+
+        if not agents:
+            print("❌ 未提供有效的 agent 名称")
+            return 1
+
+        print(f"🚀 执行 agents: {agents}")
+
         results = asyncio.run(run_agents_parallel(args.issue, agents, context, comment_count))
 
         # 输出结果
@@ -170,7 +143,7 @@ def main():
     elif args.command == "observe":
         # 运行 Observer Agent 分析 Issue
         result = asyncio.run(
-            run_observer(args.issue, getattr(args, "title", "") or "", args.context or "", comments or "")
+            run_observer(args.issue, issue_info.get("title", ""), issue_info.get("body", ""), comments)
         )
 
         print(f"\n=== Observer Analysis for Issue #{args.issue} ===")
@@ -244,9 +217,9 @@ def main():
         results = asyncio.run(run_observer_batch(issue_data_list))
 
         # 输出结果
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"分析完成：{len(results)} 个 Issues")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         triggered_count = 0
         for result in results:

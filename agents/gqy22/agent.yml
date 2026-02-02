@@ -5,7 +5,7 @@ id: gqy22-reviewer
 name: "gqy22 的研究助手"
 owner: gqy22
 display_name: "gqy22"
-contact: "gqy22@example.com"  # 请修改为你的真实邮箱
+contact: "vietchuongdhv@vinhuni.edu.vn"
 bio: "智能体开发专家，精通 Claude Agent SDK、LangChain、AutoGen、Agno 等多种 Agent 框架，专注于 LLM 应用架构设计"  # 请修改为你的真实背景
 
 # 智能体类型和描述
