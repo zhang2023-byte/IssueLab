@@ -56,12 +56,15 @@ def test_workflow_uses_uv():
     assert "uv" in content, "Workflow should use uv for package management"
 
 
-def test_workflow_uses_api_key():
-    """工作流应该使用 ANTHROPIC_API_KEY Secret"""
+def test_workflow_uses_correct_secrets():
+    """工作流应该使用正确的 Secret 名称"""
     workflow_path = PROJECT_ROOT / ".github" / "workflows" / "orchestrator.yml"
     content = workflow_path.read_text()
 
-    assert "ANTHROPIC_API_KEY" in content, "Workflow should use ANTHROPIC_API_KEY secret"
+    # 检查用户配置的 Secret
+    assert "ANTHROPIC_AUTH_KEY" in content, "Workflow should use ANTHROPIC_AUTH_KEY secret"
+    assert "ANTHROPIC_BASE_URL" in content, "Workflow should use ANTHROPIC_BASE_URL secret"
+    assert "ANTHROPIC_MODEL" in content, "Workflow should use ANTHROPIC_MODEL secret"
 
 
 def test_workflow_runs_on_ubuntu():

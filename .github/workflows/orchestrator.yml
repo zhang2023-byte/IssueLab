@@ -56,7 +56,9 @@ jobs:
           echo "=== 评审完成 ==="
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_AUTH_KEY: ${{ secrets.ANTHROPIC_AUTH_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
 
   # ========== @mention 触发（并行执行） ==========
   process-mention:
@@ -95,7 +97,9 @@ jobs:
             --agents "${{ steps.parse.outputs.mentions }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_AUTH_KEY: ${{ secrets.ANTHROPIC_AUTH_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
 
   # ========== /command 触发（顺序执行） ==========
   process-command:
@@ -153,7 +157,9 @@ jobs:
             --agents "moderator"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_AUTH_KEY: ${{ secrets.ANTHROPIC_AUTH_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
 
       # 处理 /review 命令：运行完整评审流程
       - name: Run review process
@@ -174,7 +180,9 @@ jobs:
           echo "=== 评审完成 ==="
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_AUTH_KEY: ${{ secrets.ANTHROPIC_AUTH_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
 
       # 处理 /summarize 命令
       - name: Run summarizer
@@ -185,4 +193,6 @@ jobs:
             --agents "summarizer"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_AUTH_KEY: ${{ secrets.ANTHROPIC_AUTH_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
