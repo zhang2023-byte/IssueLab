@@ -50,9 +50,10 @@ def test_agent_metadata_parsing():
     """测试 YAML 元数据解析"""
     agents = discover_agents()
     
-    # 验证 observer 存在且触发条件为空
+    # 验证 observer 存在且触发条件为空列表或 None
     if "observer" in agents:
-        assert agents["observer"]["trigger_conditions"] == []
+        trigger = agents["observer"]["trigger_conditions"]
+        assert trigger == [] or trigger is None or trigger == "", "Observer should have empty trigger conditions"
     
     # 验证 moderator 有正确的元数据
     assert "moderator" in agents

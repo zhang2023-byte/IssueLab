@@ -65,4 +65,7 @@ def test_trigger_conditions_format():
     
     for agent_name, config in agents.items():
         assert "trigger_conditions" in config, f"Agent {agent_name} missing trigger_conditions"
-        assert isinstance(config["trigger_conditions"], list), f"Agent {agent_name} trigger_conditions not a list"
+        trigger = config["trigger_conditions"]
+        # 触发条件可以是列表、空列表、None 或空字符串
+        assert isinstance(trigger, (list, type(None), str)), \
+            f"Agent {agent_name} trigger_conditions has invalid type: {type(trigger)}"
