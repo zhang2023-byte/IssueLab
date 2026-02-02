@@ -1,7 +1,7 @@
 name: Issue Orchestrator
 
 # 支持三种触发方式：@mention、/command、标签变更
-on:
+"on":
   issue_comment:
     types: [created, edited]
   issues:
