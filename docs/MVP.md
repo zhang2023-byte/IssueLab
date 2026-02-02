@@ -55,45 +55,51 @@ MVP 阶段共启用五个代理角色，各司其职。Moderator 担任分诊与
 
 ### 2.1 整体架构
 
-建议直接采用以下目录结构，充分利用 GitHub Actions 原生能力，简化架构设计：
+采用 **src layout** 结构，符合 Python 项目最佳实践：
 
 ```
-repo/
-  .github/
-    ISSUE_TEMPLATE/
-      paper.yml
-      proposal.yml
-      result.yml
-      question.yml
-    workflows/
-      orchestrator.yml    # 主工作流：处理命令触发 + 标签触发
-  agents/
-    __init__.py           # 包初始化
-    __main__.py           # 入口：python -m agents [agent_name]
-    base.py               # 代理基类 + AgentContext
-    coordinator.py        # 主协调器：使用 Subagent 模式调度各评审代理
-    moderator.py          # Moderator 子代理
-    reviewer_a.py         # ReviewerA 子代理
-    reviewer_b.py         # ReviewerB 子代理
-    summarizer.py         # Summarizer 子代理
-    tools/                # 自定义工具集
-      __init__.py
-      github_tool.py      # GitHub 操作工具
-  prompts/
-    moderator.md          # Moderator 提示词
-    reviewer_a.md         # ReviewerA 提示词
-    reviewer_b.md         # ReviewerB 提示词
-    summarizer.md         # Summarizer 提示词
-  policies/
-    protocol.md           # 交互协议文档
-  pyproject.toml          # uv 项目配置
-  uv.lock                 # 依赖锁定文件
-  README.md
+issuelab/
+├── .github/
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── paper.yml
+│   │   ├── proposal.yml
+│   │   ├── result.yml
+│   │   └── question.yml
+│   └── workflows/
+│       └── orchestrator.yml    # 主工作流
+├── src/
+│   ├── issuelab/               # 主包
+│   │   ├── __init__.py
+│   │   ├── __main__.py         # 入口：python -m issuelab
+│   │   ├── coordinator.py      # 主协调器
+│   │   ├── executor.py         # 并行执行器
+│   │   ├── parser.py           # @mention 解析器
+│   │   ├── agents/             # 代理模块
+│   │   │   ├── __init__.py
+│   │   │   ├── moderator.py
+│   │   │   ├── reviewer_a.py
+│   │   │   ├── reviewer_b.py
+│   │   │   └── summarizer.py
+│   │   └── tools/              # 工具模块
+│   │       ├── __init__.py
+│   │       └── github.py
+├── prompts/                    # 提示词模板（独立目录）
+│   ├── moderator.md
+│   ├── reviewer_a.md
+│   ├── reviewer_b.md
+│   └── summarizer.md
+├── docs/                       # 文档
+│   └── MVP.md
+├── tests/                      # 测试
+│   └── __init__.py
+├── pyproject.toml              # uv 项目配置
+├── uv.lock
+└── README.md
 ```
 
 ### 2.2 目录职责说明
 
-`.github/ISSUE_TEMPLATE/` 目录存放 Issue 模板文件，确保用户提交时提供必要的结构化信息。`.github/workflows/` 目录存放 GitHub Actions 工作流文件。`agents/` 目录包含所有代理的 Python 实现，采用 **Subagent 模式**：`coordinator.py` 作为主代理负责任务分解，`moderator.py` 等作为子代理执行具体评审。`agents/tools/` 目录存放自定义工具，封装 GitHub API 操作。`prompts/` 目录存放各代理的系统提示词模板。`pyproject.toml` 使用 uv 标准配置，定义项目元数据和依赖。
+`.github/ISSUE_TEMPLATE/` 存放 Issue 模板文件。`.github/workflows/` 存放 GitHub Actions 工作流文件。`src/issuelab/` 是主代码包，采用 **Subagent 模式**：`coordinator.py` 作为主代理负责任务分解，`executor.py` 处理 @mention 并行执行，`parser.py` 解析评论中的触发信号。`src/issuelab/agents/` 存放各评审代理实现。`src/issuelab/tools/` 存放自定义工具。`prompts/` 存放各代理的系统提示词模板。`pyproject.toml` 使用 uv 标准配置。
 
 ### 2.3 uv 环境管理
 
@@ -810,21 +816,23 @@ from claude_agent_sdk import Agent, Subagent
 
 def create_coordinator() -> Agent:
     """创建协调器主代理"""
+    # prompts 目录在项目根目录 (src/issuelab/ -> src/ -> project_root/prompts)
+    PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
     # 定义子代理
     moderator = Subagent(
         name="Moderator",
-        system_prompt=Path(__file__).parent.parent / "prompts" / "moderator.md"
+        system_prompt=(PROMPTS_DIR / "moderator.md").read_text()
     )
 
     reviewer_a = Subagent(
         name="ReviewerA",
-        system_prompt=Path(__file__).parent.parent / "prompts" / "reviewer_a.md"
+        system_prompt=(PROMPTS_DIR / "reviewer_a.md").read_text()
     )
 
     reviewer_b = Subagent(
         name="ReviewerB",
-        system_prompt=Path(__file__).parent.parent / "prompts" / "reviewer_b.md"
+        system_prompt=(PROMPTS_DIR / "reviewer_b.md").read_text()
     )
 
     # 主协调器
@@ -933,19 +941,19 @@ def create_subagent(name: str) -> Subagent:
 
     return Subagent(
         name=name.capitalize(),
-        system_prompt=Path(__file__).parent.parent / "prompts" / prompts[name]
+        system_prompt=(PROMPTS_DIR / prompts[name]).read_text()
     )
 ```
 
-### 7.6 主入口文件（agents/__main__.py）
+### 7.6 主入口文件（src/issuelab/__main__.py）
 
 ```python
 """主入口：支持多种子命令"""
 import asyncio
 import argparse
 import os
-from agents.executor import run_parallel_agents
-from agents.coordinator import run_review_process
+from issuelab.executor import run_parallel_agents
+from issuelab.coordinator import run_review_process
 
 
 async def main():
@@ -1069,7 +1077,9 @@ def load_prompt(agent_name: str) -> str:
         "reviewer_b": "reviewer_b.md",
         "summarizer": "summarizer.md",
     }
-    prompt_path = Path(__file__).parent.parent / "prompts" / prompts.get(agent_name, "")
+    # prompts 目录在项目根目录
+    PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+    prompt_path = PROMPTS_DIR / prompts.get(agent_name, "")
     if prompt_path.exists():
         return prompt_path.read_text()
     return ""
@@ -1387,31 +1397,42 @@ MVP 稳定运行后，可按以下优先级进行功能扩展。首先实现更�
 
 ```
 issuelab/
-  .github/
-    ISSUE_TEMPLATE/
-      paper.yml
-      proposal.yml
-      result.yml
-      question.yml
-    workflows/
-      orchestrator.yml    # 主工作流（支持 @mention、/command、标签触发）
-  agents/
-    __init__.py           # 子代理工厂
-    __main__.py           # 主入口（支持 execute/review/triage 子命令）
-    coordinator.py        # 协调器主代理（顺序执行）
-    executor.py           # 并行执行器（@mention 模式）
-    parser.py             # @mention 解析器
-    tools/
-      __init__.py
-      github_tool.py      # GitHub 操作工具
-  prompts/
-    moderator.md
-    reviewer_a.md
-    reviewer_b.md
-    summarizer.md
-  pyproject.toml          # uv 项目配置
-  uv.lock
-  README.md
+├── .github/
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── paper.yml
+│   │   ├── proposal.yml
+│   │   ├── result.yml
+│   │   └── question.yml
+│   └── workflows/
+│       └── orchestrator.yml    # 主工作流（支持 @mention、/command、标签触发）
+├── src/
+│   └── issuelab/               # 主包
+│       ├── __init__.py
+│       ├── __main__.py         # 主入口（支持 execute/review/triage 子命令）
+│       ├── coordinator.py      # 协调器主代理（顺序执行）
+│       ├── executor.py         # 并行执行器（@mention 模式）
+│       ├── parser.py           # @mention 解析器
+│       ├── agents/             # 代理模块
+│       │   ├── __init__.py
+│       │   ├── moderator.py
+│       │   ├── reviewer_a.py
+│       │   ├── reviewer_b.py
+│       │   └── summarizer.py
+│       └── tools/              # 工具模块
+│           ├── __init__.py
+│           └── github.py
+├── prompts/                    # 提示词模板
+│   ├── moderator.md
+│   ├── reviewer_a.md
+│   ├── reviewer_b.md
+│   └── summarizer.md
+├── docs/
+│   └── MVP.md
+├── tests/
+│   └── __init__.py
+├── pyproject.toml              # uv 项目配置
+├── uv.lock
+└── README.md
 ```
 
 ## 附录：pyproject.toml 完整配置
@@ -1461,7 +1482,9 @@ def load_prompt(agent_name: str) -> str:
         "reviewer_b": "reviewer_b.md",
         "summarizer": "summarizer.md",
     }
-    prompt_path = Path(__file__).parent.parent / "prompts" / prompts.get(agent_name, "")
+    # prompts 目录在项目根目录
+    PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+    prompt_path = PROMPTS_DIR / prompts.get(agent_name, "")
     if prompt_path.exists():
         return prompt_path.read_text()
     return ""
