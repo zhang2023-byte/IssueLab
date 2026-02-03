@@ -158,7 +158,7 @@ class TestStreamingOutput:
             result.session_id = "test-session"
             yield result
 
-        with patch("issuelab.sdk_executor.query", mock_query):
+        with patch("issuelab.agents.executor.query", mock_query):
             with patch("builtins.print") as mock_print:
                 result = await run_single_agent("test prompt", "test_agent")
                 # 验证 print 被调用（流式输出）
@@ -187,7 +187,7 @@ class TestStreamingOutput:
             result.session_id = "test-session"
             yield result
 
-        with patch("issuelab.sdk_executor.query", mock_query):
+        with patch("issuelab.agents.executor.query", mock_query):
             with patch("builtins.print") as mock_print:
                 result = await run_single_agent("test prompt", "test_agent")
                 # 验证工具名被输出
@@ -216,7 +216,7 @@ class TestStreamingOutput:
             result.session_id = "test-session"
             yield result
 
-        with patch("issuelab.sdk_executor.query", mock_query):
+        with patch("issuelab.agents.executor.query", mock_query):
             with patch("builtins.print") as mock_print:
                 result = await run_single_agent("test prompt", "test_agent")
                 # 验证 Thinking 内容没有被输出
@@ -246,7 +246,7 @@ class TestStreamingOutput:
             result.session_id = "test-session"
             yield result
 
-        with patch("issuelab.sdk_executor.query", mock_query):
+        with patch("issuelab.agents.executor.query", mock_query):
             with patch("builtins.print") as mock_print:
                 result = await run_single_agent("test prompt", "test_agent")
                 # 验证工具结果内容没有被完整输出（避免刷屏）

@@ -4,14 +4,14 @@
 所有Agent通过扫描prompts/目录自动注册。
 """
 
-# 直接从 sdk_executor 导入核心功能
+# 直接从子模块导入核心功能
 # 从 parser 导入别名配置（单一来源）
-from issuelab.parser import AGENT_ALIASES
-from issuelab.sdk_executor import (
+from issuelab.agents.discovery import (
     discover_agents,
     load_prompt,
     parse_agent_metadata,
 )
+from issuelab.parser import AGENT_ALIASES
 
 
 def normalize_agent_name(name: str) -> str:

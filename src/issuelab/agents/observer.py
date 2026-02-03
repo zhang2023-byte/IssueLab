@@ -1,0 +1,221 @@
+"""Observer Agent 专用执行逻辑
+
+处理 Observer Agent 的特殊执行场景和批处理。
+"""
+
+import anyio
+
+from issuelab.agents.discovery import discover_agents, get_agent_matrix_markdown
+from issuelab.agents.executor import run_single_agent
+from issuelab.agents.parsers import parse_observer_response, parse_papers_recommendation
+from issuelab.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
+async def run_observer(issue_number: int, issue_title: str = "", issue_body: str = "", comments: str = "") -> dict:
+    """运行 Observer Agent
+
+    Observer Agent 会分析 Issue 并决定是否需要触发其他 Agent。
+
+    Args:
+        issue_number: Issue 编号
+        issue_title: Issue 标题
+        issue_body: Issue 内容
+        comments: 历史评论
+
+    Returns:
+        {
+            "should_trigger": bool,
+            "agent": str,  # 要触发的 Agent 名称
+            "comment": str,  # 触发评论内容
+            "reason": str,  # 触发理由
+            "analysis": str,  # Issue 分析
+        }
+    """
+    agents = discover_agents()
+    observer_config = agents.get("observer", {})
+
+    if not observer_config:
+        return {
+            "should_trigger": False,
+            "error": "Observer agent not found",
+        }
+
+    # 获取 prompt（移除 frontmatter）
+    prompt_template = observer_config["prompt"]
+    lines = prompt_template.split("\n")
+    content_lines = []
+    in_frontmatter = False
+    for line in lines:
+        if line.strip() == "---":
+            in_frontmatter = not in_frontmatter
+            continue
+        if not in_frontmatter:
+            content_lines.append(line)
+    prompt = "\n".join(content_lines)
+
+    # 使用唯一的占位符标记替换
+    prompt = prompt.replace("__ISSUE_NUMBER__", str(issue_number))
+    prompt = prompt.replace("__ISSUE_TITLE__", issue_title)
+    prompt = prompt.replace("__ISSUE_BODY__", issue_body or "无内容")
+    prompt = prompt.replace("__COMMENTS__", comments or "无评论")
+    prompt = prompt.replace("__AGENT_MATRIX__", get_agent_matrix_markdown())
+
+    logger.info(f"[Observer] 开始分析 Issue #{issue_number}")
+    logger.debug(f"[Observer] Title: {issue_title[:50]}...")
+
+    result = await run_single_agent(prompt, "observer")
+
+    # 解析响应（从 dict 中提取 response 字段）
+    response_text = result.get("response", "")
+    logger.debug(f"[Observer] 响应长度: {len(response_text)} 字符")
+
+    # 解析响应
+    decision = parse_observer_response(response_text, issue_number)
+    decision["cost_usd"] = result.get("cost_usd", 0.0)
+    decision["num_turns"] = result.get("num_turns", 0)
+
+    return decision
+
+
+async def run_observer_batch(issue_data_list: list[dict]) -> list[dict]:
+    """并行运行 Observer Agent 分析多个 Issues
+
+    Args:
+        issue_data_list: Issue 数据列表，每个元素包含:
+            {
+                "issue_number": int,
+                "issue_title": str,
+                "issue_body": str,
+                "comments": str,
+            }
+
+    Returns:
+        分析结果列表，每个元素包含 issue_number 和决策结果
+    """
+    logger.info(f"开始并行分析 {len(issue_data_list)} 个 Issues")
+
+    results = []
+
+    async with anyio.create_task_group() as tg:
+
+        async def analyze_one(issue_data: dict):
+            issue_number = issue_data["issue_number"]
+            try:
+                result = await run_observer(
+                    issue_number=issue_number,
+                    issue_title=issue_data.get("issue_title", ""),
+                    issue_body=issue_data.get("issue_body", ""),
+                    comments=issue_data.get("comments", ""),
+                )
+                result["issue_number"] = issue_number
+                results.append(result)
+                logger.info(f"Issue #{issue_number} 分析完成: should_trigger={result.get('should_trigger')}")
+            except Exception as e:
+                logger.error(f"Issue #{issue_number} 分析失败: {e}", exc_info=True)
+                results.append(
+                    {
+                        "issue_number": issue_number,
+                        "should_trigger": False,
+                        "error": str(e),
+                    }
+                )
+
+        for issue_data in issue_data_list:
+            tg.start_soon(analyze_one, issue_data)
+
+    logger.info(f"并行分析完成，总计 {len(results)} 个结果")
+    return results
+
+
+def build_papers_for_observer(papers: list[dict]) -> str:
+    """构建供 Observer 分析的论文上下文
+
+    Args:
+        papers: 论文列表
+
+    Returns:
+        格式化的论文上下文字符串
+    """
+    lines = ["## 可讨论的 arXiv 论文候选\n"]
+
+    for i, paper in enumerate(papers):
+        lines.append(f"### 论文 {i}")
+        lines.append(f"**标题**: {paper.get('title', '')}")
+        lines.append(f"**分类**: {paper.get('category', '')}")
+        lines.append(f"**发布时间**: {paper.get('published', '')}")
+        lines.append(f"**链接**: [{paper.get('url', '')}]({paper.get('url', '')})")
+        lines.append(f"**作者**: {paper.get('authors', '')}")
+        lines.append(f"**摘要**: {paper.get('summary', '')}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+async def run_observer_for_papers(papers: list[dict]) -> list[dict]:
+    """运行 Observer Agent 分析 arXiv 论文列表
+
+    Args:
+        papers: 论文列表，每个论文包含:
+            - id, title, summary, url, pdf_url
+            - authors, published, category
+
+    Returns:
+        推荐论文列表（从 papers 中筛选出的论文）
+    """
+    if not papers:
+        return []
+
+    agents = discover_agents()
+    observer_config = agents.get("observer", {})
+
+    if not observer_config:
+        logger.error("Observer agent not found")
+        return []
+
+    # 构建论文上下文
+    papers_context = build_papers_for_observer(papers)
+    agent_matrix = get_agent_matrix_markdown()
+
+    # 获取 prompt（移除 frontmatter）
+    prompt_template = observer_config["prompt"]
+    lines = prompt_template.split("\n")
+    content_lines = []
+    in_frontmatter = False
+    for line in lines:
+        if line.strip() == "---":
+            in_frontmatter = not in_frontmatter
+            continue
+        if not in_frontmatter:
+            content_lines.append(line)
+    prompt = "\n".join(content_lines)
+
+    # 使用唯一的占位符标记替换
+    prompt = prompt.replace("__AGENT_MATRIX__", agent_matrix)
+    prompt = prompt.replace("__PAPERS_CONTEXT__", papers_context)
+
+    logger.info(f"[Observer] 开始分析 {len(papers)} 篇候选论文")
+
+    # 调用 agent
+    result = await run_single_agent(prompt, "observer")
+
+    # 解析响应
+    response_text = result.get("response", "")
+    logger.debug(f"[Observer] 响应长度: {len(response_text)} 字符")
+
+    # 解析推荐结果
+    recommended_indices = parse_papers_recommendation(response_text, len(papers))
+
+    # 从原始论文数据中获取完整信息
+    recommended_papers = []
+    for item in recommended_indices:
+        idx = item["index"]
+        if 0 <= idx < len(papers):
+            paper = papers[idx].copy()
+            paper["reason"] = item.get("reason", "")
+            paper["summary"] = item.get("summary", paper.get("summary", ""))
+            recommended_papers.append(paper)
+
+    logger.info(f"[Observer] 推荐 {len(recommended_papers)} 篇论文")
+    return recommended_papers
