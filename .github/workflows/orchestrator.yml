@@ -73,7 +73,7 @@ jobs:
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
           LOG_FILE: ${{ github.workspace }}/logs/auto_review_${{ github.event.issue.number }}.log
           LOG_LEVEL: DEBUG
-          ENABLE_ARXIV_MCP: true
+          ENABLE_ARXIV_MCP: false
           ENABLE_GITHUB_MCP: false
           CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK: "true"
           CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: "30000"
@@ -192,7 +192,7 @@ jobs:
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
           LOG_FILE: ${{ github.workspace }}/logs/moderator_${{ github.event.issue.number }}.log
           LOG_LEVEL: DEBUG
-          ENABLE_ARXIV_MCP: true
+          ENABLE_ARXIV_MCP: false
           ENABLE_GITHUB_MCP: false
           CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK: "true"
           CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: "30000"
@@ -244,7 +244,7 @@ jobs:
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
           LOG_FILE: ${{ github.workspace }}/logs/reviewer_a_${{ github.event.issue.number }}.log
           LOG_LEVEL: DEBUG
-          ENABLE_ARXIV_MCP: true
+          ENABLE_ARXIV_MCP: false
           ENABLE_GITHUB_MCP: false
           CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK: "true"
           CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: "30000"
@@ -296,7 +296,7 @@ jobs:
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
           LOG_FILE: ${{ github.workspace }}/logs/reviewer_b_${{ github.event.issue.number }}.log
           LOG_LEVEL: DEBUG
-          ENABLE_ARXIV_MCP: true
+          ENABLE_ARXIV_MCP: false
           ENABLE_GITHUB_MCP: false
           CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK: "true"
           CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: "30000"
@@ -348,7 +348,7 @@ jobs:
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
           LOG_FILE: ${{ github.workspace }}/logs/summarizer_${{ github.event.issue.number }}.log
           LOG_LEVEL: DEBUG
-          ENABLE_ARXIV_MCP: true
+          ENABLE_ARXIV_MCP: false
           ENABLE_GITHUB_MCP: false
           CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK: "true"
           CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: "30000"
@@ -492,7 +492,7 @@ jobs:
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
           LOG_FILE: ${{ github.workspace }}/logs/review_${{ github.event.issue.number }}.log
           LOG_LEVEL: DEBUG
-          ENABLE_ARXIV_MCP: true
+          ENABLE_ARXIV_MCP: false
           ENABLE_GITHUB_MCP: false
           CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK: "true"
           CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: "30000"
