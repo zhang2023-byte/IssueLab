@@ -147,8 +147,42 @@ def build_papers_for_observer(papers: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def filter_existing_papers(papers: list[dict], repo_name: str, token: str) -> list[dict]:
+    """过滤掉已存在 Issue 的论文
+
+    Args:
+        papers: 论文列表
+        repo_name: 仓库名 (owner/repo)
+        token: GitHub Token
+
+    Returns:
+        过滤后的论文列表
+    """
+    if not papers:
+        return []
+
+    g = Github(token)
+    repo = g.get_repo(repo_name)
+
+    # 获取已存在的 Issue 标题
+    existing_titles = {issue.title for issue in repo.get_issues(state='all')}
+
+    # 过滤
+    filtered = []
+    for paper in papers:
+        title = f"[论文讨论] {paper['title']}"
+        if title in existing_titles:
+            logger.debug(f"跳过已存在: {title[:50]}...")
+        else:
+            filtered.append(paper)
+
+    logger.info(f"过滤后剩余 {len(filtered)} 篇新论文（已排除 {len(papers) - len(filtered)} 篇已存在）")
+    return filtered
+
+
 def analyze_with_observer(papers: list[dict], token: str) -> list[dict]:
     """使用 Observer agent 分析论文，返回推荐的论文"""
+
     import asyncio
     from pathlib import Path
 
@@ -159,6 +193,11 @@ def analyze_with_observer(papers: list[dict], token: str) -> list[dict]:
     logger.info(f"\n{'='*60}")
     logger.info(f"[Observer Agent] 开始智能分析 {len(papers)} 篇论文")
     logger.info(f"{'='*60}")
+
+    # 如果论文不足 2 篇，无法推荐
+    if len(papers) < 2:
+        logger.warning(f"论文数量不足 {2} 篇，无法进行智能推荐")
+        return []
 
     # 调用真正的 Observer agent
     try:
@@ -215,16 +254,10 @@ def create_issues(recommended: list[dict], repo_name: str, token: str) -> int:
     g = Github(token)
     repo = g.get_repo(repo_name)
 
-    # 获取已存在的 Issue 标题
-    existing_titles = {issue.title for issue in repo.get_issues(state='all')}
     created = 0
 
     for paper in recommended:
         title = f"[论文讨论] {paper['title']}"
-
-        if title in existing_titles:
-            print(f"⏭️  已存在: {title[:50]}...")
-            continue
 
         body = f"""## 论文信息
 
@@ -320,8 +353,20 @@ def main(argv: list[str] | None = None) -> int:
 
     # 分析并创建 Issues
     if args.token and args.repo:
-        # Observer 分析
-        recommended = analyze_with_observer(papers, args.token)
+        # 先过滤已存在的论文
+        new_papers = filter_existing_papers(papers, args.repo, args.token)
+
+        # Observer 分析（只分析新论文）
+        recommended = analyze_with_observer(new_papers, args.token)
+
+        if len(recommended) == 0:
+            if len(new_papers) == 0:
+                logger.info("所有论文已存在，无需推荐")
+            elif len(new_papers) < 2:
+                logger.info(f"新论文数量不足 2 篇，无法智能推荐")
+            else:
+                logger.info("智能分析未返回有效结果")
+            return 0
 
         # 创建 Issues
         logger.info("开始创建 Issues...")
