@@ -108,6 +108,9 @@ def main():
     )
     personal_reply_parser.add_argument("--issue-title", type=str, default="", help="Issue标题（可选，用于优化）")
     personal_reply_parser.add_argument("--issue-body", type=str, default="", help="Issue内容（可选，用于优化）")
+    personal_reply_parser.add_argument(
+        "--available-agents", type=str, default="", help="系统中可用的智能体列表（JSON格式）"
+    )
     personal_reply_parser.add_argument("--post", action="store_true", help="自动发布回复到主仓库")
 
     args = parser.parse_args()
@@ -420,9 +423,18 @@ def main():
 
 请直接给出你的回复内容，不需要任何前缀（系统会自动处理）。"""
 
+        # 解析available_agents
+        available_agents = None
+        if hasattr(args, "available_agents") and args.available_agents:
+            try:
+                available_agents = json.loads(args.available_agents)
+                print(f"📋 收到 {len(available_agents)} 个可用智能体信息")
+            except json.JSONDecodeError as e:
+                print(f"⚠️  解析available_agents失败: {e}")
+
         # 执行agent
         print(f"🚀 使用 {args.agent} 分析 {args.repo}#{args.issue}")
-        results = asyncio.run(run_agents_parallel(args.issue, [args.agent], context, 0))
+        results = asyncio.run(run_agents_parallel(args.issue, [args.agent], context, 0, available_agents))
 
         if args.agent not in results:
             print(f"❌ Agent {args.agent} 执行失败")
