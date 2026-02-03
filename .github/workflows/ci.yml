@@ -67,28 +67,19 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
-
-      - name: Set up Python
-        run: uv python install 3.13
-
-      - name: Install dependencies
-        run: |
-          uv sync
-          uv pip install ruff mypy
+        with:
+          enable-cache: true
 
       - name: Run ruff (linting)
-        run: |
-          uv run ruff check src/ tests/ --output-format=github
+        run: uvx ruff check src/ tests/ --output-format=github
         continue-on-error: true
 
       - name: Run ruff (formatting check)
-        run: |
-          uv run ruff format --check src/ tests/
+        run: uvx ruff format --check src/ tests/
         continue-on-error: true
 
       - name: Run mypy (type checking)
-        run: |
-          uv run mypy src/issuelab --ignore-missing-imports
+        run: uvx mypy src/issuelab --ignore-missing-imports
         continue-on-error: true
 
   security:

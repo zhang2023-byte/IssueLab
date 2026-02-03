@@ -139,11 +139,79 @@ App ID: 123456
      -----END RSA PRIVATE KEY-----
      ```
 
-### 步骤 6：更新 Workflow 文件（已完成）
+### 步骤 6：验证配置
 
-主仓库的 workflow 已配置为使用 GitHub App token：
+主仓库的 workflow 已配置为使用 **动态 GitHub App Token 生成**：
+
+**工作原理：**
 
 ```yaml
+- name: Dispatch to user repositories
+  env:
+    GITHUB_APP_ID: ${{ secrets.ISSUELAB_APP_ID }}
+    GITHUB_APP_PRIVATE_KEY: ${{ secrets.ISSUELAB_APP_PRIVATE_KEY }}
+  run: |
+    python -m issuelab.cli.dispatch \
+      --mentions "$mentions" \
+      --use-github-app
+```
+
+Python 脚本会：
+1. 解析要 dispatch 的目标仓库列表
+2. **为每个目标仓库动态生成 Installation Token**：
+   - 使用 App ID 和 Private Key 生成 JWT
+   - 查询目标仓库的 Installation ID
+   - 生成该 Installation 的 Access Token
+3. 使用专属 Token 触发该仓库的 workflow
+
+这种方式的优势：
+- ✅ **无需硬编码用户名**：自动适配任意 fork 仓库
+- ✅ **按需生成 Token**：只在需要时才生成，节省 API 配额
+- ✅ **正确的权限隔离**：每个仓库使用自己的 Installation Token
+- ✅ **可扩展性**：支持任意数量的用户和 fork 仓库
+
+**注意事项：**
+
+⚠️ **每个 fork 仓库必须独立安装 App**！
+
+即使代码已经同步，如果目标仓库没有安装 App，dispatch 会失败并显示：
+```
+⚠️ No installation found for username/IssueLab
+```
+
+解决方法：访问 https://github.com/apps/YOUR-APP-NAME 并安装到该仓库。
+
+---
+
+## 📊 工作流程图
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant M as Main Repo
+    participant D as dispatch.py
+    participant G as GitHub API
+    participant F as Fork Repo
+
+    U->>M: Post @username comment
+    M->>D: Trigger with APP_ID + PRIVATE_KEY
+    D->>D: Generate JWT from App credentials
+    D->>G: Find Installation ID for username/repo
+    G->>D: Return Installation ID
+    D->>G: Generate Installation Token
+    G->>D: Return Access Token
+    D->>F: Trigger workflow_dispatch with Token
+    F->>F: Execute agent workflow
+```
+
+---
+
+## 🔧 原 Workflow 配置（已废弃）
+
+以下配置已被动态 Token 生成替代，仅供参考：
+
+```yaml
+# ❌ 旧方式：预生成单个用户的 Token（已废弃）
 - name: Generate GitHub App Token
   id: app-token
   uses: actions/create-github-app-token@v1

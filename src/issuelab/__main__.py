@@ -74,10 +74,39 @@ def main():
     # Observer 批量分析命令（并行）
     observe_batch_parser = subparsers.add_parser("observe-batch", help="并行分析多个 Issues")
     observe_batch_parser.add_argument("--issues", type=str, required=True, help="Issue 编号列表（逗号分隔）")
-    observe_batch_parser.add_argument("--post", action="store_true", help="自动发布触发评论到 Issue")
+    observe_batch_parser.add_argument(
+        "--auto-trigger", action="store_true", help="自动触发 agent（内置agent用label，用户agent用dispatch）"
+    )
+    observe_batch_parser.add_argument(
+        "--post", action="store_true", help="自动发布触发评论到 Issue（已弃用，推荐使用 --auto-trigger）"
+    )
 
     # 列出所有可用 Agent
     subparsers.add_parser("list-agents", help="列出所有可用的 Agent")
+
+    # 个人Agent扫描命令（用于fork仓库）
+    personal_scan_parser = subparsers.add_parser(
+        "personal-scan", help="个人agent扫描主仓库issues（用于fork仓库）"
+    )
+    personal_scan_parser.add_argument("--agent", type=str, required=True, help="个人agent名称")
+    personal_scan_parser.add_argument("--issues", type=str, required=True, help="候选issue编号（逗号分隔）")
+    personal_scan_parser.add_argument(
+        "--max-replies", type=int, default=3, help="最多回复的issue数量（默认3）"
+    )
+    personal_scan_parser.add_argument(
+        "--repo", type=str, default="gqy20/IssueLab", help="主仓库名称（默认gqy20/IssueLab）"
+    )
+
+    # 个人Agent回复命令（用于fork仓库）
+    personal_reply_parser = subparsers.add_parser(
+        "personal-reply", help="个人agent回复主仓库issue（用于fork仓库）"
+    )
+    personal_reply_parser.add_argument("--agent", type=str, required=True, help="个人agent名称")
+    personal_reply_parser.add_argument("--issue", type=int, required=True, help="Issue编号")
+    personal_reply_parser.add_argument(
+        "--repo", type=str, default="gqy20/IssueLab", help="主仓库名称（默认gqy20/IssueLab）"
+    )
+    personal_reply_parser.add_argument("--post", action="store_true", help="自动发布回复到主仓库")
 
     args = parser.parse_args()
 
@@ -113,9 +142,32 @@ def main():
         results = asyncio.run(run_agents_parallel(args.issue, agents, context, comment_count))
 
         # 输出结果
-        for agent_name, response in results.items():
-            print(f"\n=== {agent_name} result ===")
+        for agent_name, result in results.items():
+            response = result.get("response", str(result))
+            cost_usd = result.get("cost_usd", 0.0)
+            num_turns = result.get("num_turns", 0)
+            tool_calls = len(result.get("tool_calls", []))
+
+            print(f"\n=== {agent_name} result (成本: ${cost_usd:.4f}, 轮数: {num_turns}, 工具: {tool_calls}) ===")
             print(response)
+
+            # 🔥 处理response中的@mentions（自动触发被@的agents）
+            from issuelab.response_processor import process_agent_response
+
+            processed = process_agent_response(
+                agent_name=agent_name,
+                response=result,
+                issue_number=args.issue,
+                issue_title=issue_info.get("title", ""),
+                issue_body=issue_info.get("body", ""),
+                auto_dispatch=True,  # 自动触发被@的agents
+            )
+
+            if processed["mentions"]:
+                print(f"📬 发现 @mentions: {', '.join(processed['mentions'])}")
+                for mentioned_user, success in processed["dispatch_results"].items():
+                    status = "✅" if success else "❌"
+                    print(f"  {status} 触发 {mentioned_user}")
 
             # 如果需要，自动发布到 Issue
             if getattr(args, "post", False):
@@ -129,8 +181,13 @@ def main():
         agents = ["moderator", "reviewer_a", "reviewer_b", "summarizer"]
         results = asyncio.run(run_agents_parallel(args.issue, agents, context, comment_count))
 
-        for agent_name, response in results.items():
-            print(f"\n=== {agent_name} result ===")
+        for agent_name, result in results.items():
+            response = result.get("response", str(result))
+            cost_usd = result.get("cost_usd", 0.0)
+            num_turns = result.get("num_turns", 0)
+            tool_calls = len(result.get("tool_calls", []))
+
+            print(f"\n=== {agent_name} result (成本: ${cost_usd:.4f}, 轮数: {num_turns}, 工具: {tool_calls}) ===")
             print(response)
 
             # 如果需要，自动发布到 Issue
@@ -234,11 +291,29 @@ def main():
                 print(f"  Agent: {result.get('agent', 'N/A')}")
                 print(f"  理由: {result.get('reason', 'N/A')}")
 
-                # 如果需要，自动发布触发评论
-                if getattr(args, "post", False):
+                # 🔥 自动触发 agent（通过 label 或 dispatch）
+                if getattr(args, "auto_trigger", False):
+                    from issuelab.observer_trigger import auto_trigger_agent
+
+                    # 查找对应的 issue 数据
+                    issue_info = next((d for d in issue_data_list if d["issue_number"] == issue_num), None)
+                    if issue_info:
+                        success = auto_trigger_agent(
+                            agent_name=result.get("agent", ""),
+                            issue_number=issue_num,
+                            issue_title=issue_info.get("issue_title", ""),
+                            issue_body=issue_info.get("issue_body", ""),
+                        )
+                        if success:
+                            print("  🚀 已自动触发 agent")
+                        else:
+                            print("  ❌ 自动触发失败")
+
+                # 如果需要，自动发布触发评论（已弃用，使用 auto_trigger 代替）
+                elif getattr(args, "post", False):
                     comment = result.get("comment")
                     if comment and post_comment(issue_num, comment):
-                        print("  ✅ 已发布触发评论")
+                        print("  ✅ 已发布触发评论（⚠️ 注意：bot评论不会触发workflow）")
                     else:
                         print("  ❌ 发布评论失败")
             else:
@@ -250,6 +325,99 @@ def main():
             print()
 
         print(f"\n总结: {triggered_count}/{len(results)} 个 Issues 需要触发 Agent")
+
+    elif args.command == "personal-scan":
+        # 个人Agent扫描主仓库issues
+        import yaml
+
+        from issuelab.personal_scan import scan_issues_for_personal_agent
+
+        # 读取agent配置
+        agent_config_path = f"agents/{args.agent}/agent.yml"
+        try:
+            with open(agent_config_path) as f:
+                agent_config = yaml.safe_load(f)
+        except FileNotFoundError:
+            print(f"❌ 未找到agent配置: {agent_config_path}")
+            return 1
+
+        # 解析issue编号
+        issue_numbers = [int(n.strip()) for n in args.issues.split(",") if n.strip().isdigit()]
+
+        if not issue_numbers:
+            print("❌ 未提供有效的issue编号")
+            return 1
+
+        # 扫描issues
+        result = scan_issues_for_personal_agent(
+            agent_name=args.agent,
+            agent_config=agent_config,
+            issue_numbers=issue_numbers,
+            repo=args.repo,
+            max_replies=args.max_replies,
+            username="",  # TODO: 从环境获取
+        )
+
+        # 输出JSON结果（供workflow解析）
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    elif args.command == "personal-reply":
+        # 个人Agent回复主仓库issue
+        import subprocess
+        import yaml
+
+        # 读取agent配置
+        agent_config_path = f"agents/{args.agent}/agent.yml"
+        try:
+            with open(agent_config_path) as f:
+                agent_config = yaml.safe_load(f)
+        except FileNotFoundError:
+            print(f"❌ 未找到agent配置: {agent_config_path}")
+            return 1
+
+        # 从主仓库获取issue信息
+        try:
+            result = subprocess.run(
+                ["gh", "issue", "view", str(args.issue), "--repo", args.repo, "--json", "title,body"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            issue_data = json.loads(result.stdout)
+            issue_title = issue_data.get("title", "")
+            issue_body = issue_data.get("body", "")
+        except Exception as e:
+            print(f"❌ 获取issue信息失败: {e}")
+            return 1
+
+        # 构建上下文
+        context = f"**Issue 标题**: {issue_title}\n\n**Issue 内容**:\n{issue_body}"
+
+        # 执行agent
+        print(f"🚀 使用 {args.agent} 分析 {args.repo}#{args.issue}")
+        results = asyncio.run(run_agents_parallel(args.issue, [args.agent], context, 0))
+
+        if args.agent not in results:
+            print(f"❌ Agent {args.agent} 执行失败")
+            return 1
+
+        result = results[args.agent]
+        response = result.get("response", str(result))
+
+        print(f"\n=== {args.agent} Response ===")
+        print(response)
+
+        # 发布到主仓库
+        if getattr(args, "post", False):
+            try:
+                subprocess.run(
+                    ["gh", "issue", "comment", str(args.issue), "--repo", args.repo, "--body", response],
+                    check=True,
+                )
+                print(f"✅ 已发布到 {args.repo}#{args.issue}")
+            except Exception as e:
+                print(f"❌ 发布失败: {e}")
+                return 1
 
     elif args.command == "list-agents":
         # 列出所有可用的 Agent

@@ -20,18 +20,23 @@
 
 ## 使用方式
 
-### @Mention 并行触发（推荐）
+### @Mention 触发
 
 ```markdown
-请 @Moderator 分诊，@ReviewerA 评审，@ReviewerB 找问题
+@Moderator 分诊
+@ReviewerA 评审可行性
+@ReviewerB 找问题
+@Summarizer 汇总共识
+@Observer 分析并决定是否触发
+@Echo 快速测试
 ```
 
-### /Command 顺序触发
+**支持别名**：`@mod`、`@reviewer`/`@reviewera`、`@reviewerb`/`@revb`、`@summary`
+
+### /Command 触发
 
 ```markdown
-/review      # 完整评审流程
-/summarize   # 汇总共识
-/triage      # 仅 Moderator 分诊
+/review      # 完整评审流程（moderator -> reviewer_a -> reviewer_b -> summarizer）
 /quiet       # 机器人静默
 ```
 

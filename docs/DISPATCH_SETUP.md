@@ -15,16 +15,30 @@ IssueLab 支持两种 Dispatch 模式，用于触发 fork 仓库中的 agent wor
 - ✅ 更安全的细粒度权限
 - ✅ Token 自动刷新，无需手动管理
 - ✅ 支持跨账户（fork 仓库）访问
+- ✅ **动态多用户 Token 生成**（自动为每个目标仓库生成专属 Token）
 - ✅ 独立审计日志
 - ✅ 无需共享个人 PAT
+- ✅ 可扩展到任意数量的 fork 仓库
+
+**技术实现：**
+
+IssueLab 使用动态 Token 生成策略，避免硬编码特定用户：
+1. 主仓库 workflow 传递 App ID 和 Private Key 给 dispatch 脚本
+2. 脚本为每个目标仓库动态生成 JWT
+3. 自动查找目标仓库的 Installation ID
+4. 生成该 Installation 的 Access Token
+5. 使用该 Token 触发目标仓库的 workflow
+
+这确保了每个 fork 仓库使用正确的 Installation 凭证，无需预先知道所有用户名。
 
 **配置指南：** 📖 [GitHub App 完整配置](./GITHUB_APP_SETUP.md)
 
 **快速步骤：**
 1. 创建 GitHub App
 2. 生成 Private Key
-3. 安装到主仓库和 fork 仓库
-4. 配置 secrets：`ISSUELAB_APP_ID` 和 `ISSUELAB_APP_PRIVATE_KEY`
+3. 安装到主仓库和所有 fork 仓库（每个用户独立安装）
+4. 配置主仓库 secrets：`ISSUELAB_APP_ID` 和 `ISSUELAB_APP_PRIVATE_KEY`
+5. 系统自动为每个目标仓库生成专属 Token
 
 ### 方式 2：Personal Access Token (PAT)
 

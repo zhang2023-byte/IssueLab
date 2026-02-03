@@ -2,6 +2,7 @@
 
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import anyio
@@ -20,6 +21,159 @@ logger = get_logger(__name__)
 # 提示词目录
 PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 AGENTS_DIR = Path(__file__).parent.parent.parent / "agents"
+
+
+@dataclass
+class AgentConfig:
+    """Agent 执行配置（超时控制）
+
+    官方推荐使用 max_turns 防止无限循环：
+    https://platform.claude.com/docs/en/agent-sdk/hosting
+
+    Attributes:
+        max_turns: 最大对话轮数（防止无限循环）
+        max_budget_usd: 最大花费限制（成本保护）
+        timeout_seconds: 总超时时间（秒）
+    """
+
+    max_turns: int = 3
+    max_budget_usd: float = 0.50
+    timeout_seconds: int = 180
+
+
+# 场景配置
+SCENE_CONFIGS: dict[str, AgentConfig] = {
+    "quick": AgentConfig(
+        max_turns=2,
+        max_budget_usd=0.20,
+        timeout_seconds=60,
+    ),
+    "review": AgentConfig(
+        max_turns=3,
+        max_budget_usd=0.50,
+        timeout_seconds=180,
+    ),
+    "deep": AgentConfig(
+        max_turns=5,
+        max_budget_usd=1.00,
+        timeout_seconds=300,
+    ),
+}
+
+
+def get_agent_config_for_scene(scene: str = "review") -> AgentConfig:
+    """根据场景获取配置
+
+    Args:
+        scene: 场景名称 ("quick", "review", "deep")
+        default: "review"
+
+    Returns:
+        AgentConfig: 对应的场景配置
+    """
+    return SCENE_CONFIGS.get(scene, SCENE_CONFIGS["review"])
+
+
+# ========== 缓存机制 ==========
+
+# 全局缓存：存储 Agent 选项
+_cached_agent_options: dict[tuple, ClaudeAgentOptions] = {}
+
+
+def clear_agent_options_cache() -> None:
+    """清除 Agent 选项缓存
+
+    在测试或配置更改后调用此函数以确保使用最新的配置。
+    """
+    global _cached_agent_options
+    _cached_agent_options = {}
+    logger.info("Agent 选项缓存已清除")
+
+
+def _create_agent_options_impl(
+    max_turns: int | None,
+    max_budget_usd: float | None,
+) -> ClaudeAgentOptions:
+    """创建 Agent 选项的实际实现（无缓存）"""
+    env = Config.get_anthropic_env()
+    env["CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK"] = "true"
+
+    arxiv_storage_path = Config.get_arxiv_storage_path()
+
+    # 收集 SDK 内部日志的回调
+    sdk_logs: list[str] = []
+
+    def sdk_stderr_handler(message: str) -> None:
+        """捕获 SDK 内部日志（包含详细的模型交互信息）"""
+        log_entry = f"[SDK] {message}"
+        sdk_logs.append(log_entry)
+        # 输出到终端
+        print(message, end="", flush=True)
+        # 记录到日志
+        logger.debug(f"[SDK] {message}")
+
+    mcp_servers = []
+    if Config.is_arxiv_mcp_enabled():
+        mcp_servers.append(
+            {
+                "name": "arxiv-mcp-server",
+                "command": "arxiv-mcp-server",
+                "args": ["--storage-path", arxiv_storage_path],
+                "env": env.copy(),
+            }
+        )
+
+    if Config.is_github_mcp_enabled():
+        mcp_servers.append(
+            {
+                "name": "github-mcp-server",
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-github"],
+                "env": env.copy(),
+            }
+        )
+
+    agents = discover_agents()
+
+    base_tools = ["Read", "Write", "Bash"]
+
+    arxiv_tools = []
+    if os.environ.get("ENABLE_ARXIV_MCP", "true").lower() == "true":
+        arxiv_tools = ["search_papers", "download_paper", "read_paper", "list_papers"]
+
+    github_tools = []
+    if os.environ.get("ENABLE_GITHUB_MCP", "true").lower() == "true":
+        github_tools = [
+            "search_repositories",
+            "get_file_contents",
+            "list_commits",
+            "search_code",
+            "get_issue",
+        ]
+
+    all_tools = base_tools + arxiv_tools + github_tools
+    model = Config.get_anthropic_model()
+
+    agent_definitions = {}
+    for name, config in agents.items():
+        if name == "observer":
+            continue
+        agent_definitions[name] = AgentDefinition(
+            description=config["description"],
+            prompt=config["prompt"],
+            tools=all_tools,
+            model=model,
+        )
+
+    return ClaudeAgentOptions(
+        agents=agent_definitions,
+        max_turns=max_turns if max_turns is not None else AgentConfig().max_turns,
+        max_budget_usd=max_budget_usd if max_budget_usd is not None else AgentConfig().max_budget_usd,
+        setting_sources=["user", "project"],
+        env=env,
+        mcp_servers=mcp_servers,
+        stderr=sdk_stderr_handler,  # 捕获 SDK 内部详细日志
+    )
 
 
 def parse_agent_metadata(content: str) -> dict | None:
@@ -184,127 +338,207 @@ def load_prompt(agent_name: str) -> str:
     return ""
 
 
-def create_agent_options() -> ClaudeAgentOptions:
-    """创建包含所有评审代理的配置（动态发现）"""
-    # 从配置模块获取环境变量
-    env = Config.get_anthropic_env()
-    arxiv_storage_path = Config.get_arxiv_storage_path()
+def create_agent_options(
+    max_turns: int | None = None,
+    max_budget_usd: float | None = None,
+) -> ClaudeAgentOptions:
+    """创建包含所有评审代理的配置（动态发现）
 
-    # MCP 服务器配置
-    mcp_servers = []
-    if Config.is_arxiv_mcp_enabled():
-        # 使用预安装的 arxiv-mcp-server (通过 uv tool install 安装)
-        # 而不是 uv tool run（每次都重新安装，导致超时）
-        mcp_servers.append(
-            {
-                "name": "arxiv-mcp-server",
-                "command": "arxiv-mcp-server",  # 直接使用已安装的命令
-                "args": [
-                    "--storage-path",
-                    arxiv_storage_path,
-                ],
-                "env": env.copy(),
-            }
-        )
+    官方推荐的超时控制参数：
+    - max_turns: 限制对话轮数，防止无限循环
+    - max_budget_usd: 限制花费，防止意外支出
 
-    # GitHub MCP 服务器配置
-    if Config.is_github_mcp_enabled():
-        mcp_servers.append(
-            {
-                "name": "github-mcp-server",
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-github"],
-                "env": env.copy(),
-            }
-        )
+    Args:
+        max_turns: 最大对话轮数（默认使用 AgentConfig 默认值）
+        max_budget_usd: 最大花费限制（默认使用 AgentConfig 默认值）
 
-    # 动态获取所有 Agent（排除 observer，它不能自己触发自己）
-    agents = discover_agents()
+    Returns:
+        ClaudeAgentOptions: 配置好的 SDK 选项
 
-    # 根据环境变量决定是否启用 MCP 工具
-    base_tools = ["Read", "Write", "Bash"]
+    Note:
+        此函数使用缓存来避免重复创建相同的配置。
+        如果需要强制刷新配置，请先调用 clear_agent_options_cache()。
+    """
+    # 使用默认值
+    effective_max_turns = max_turns if max_turns is not None else AgentConfig().max_turns
+    effective_max_budget = max_budget_usd if max_budget_usd is not None else AgentConfig().max_budget_usd
 
-    arxiv_tools = []
-    if os.environ.get("ENABLE_ARXIV_MCP", "true").lower() == "true":
-        arxiv_tools = ["search_papers", "download_paper", "read_paper", "list_papers"]
+    # 缓存键：使用参数元组
+    cache_key = (effective_max_turns, effective_max_budget)
 
-    github_tools = []
-    if os.environ.get("ENABLE_GITHUB_MCP", "true").lower() == "true":
-        # GitHub 工具 - 用于搜索开源实现、查看代码仓库
-        github_tools = [
-            "search_repositories",  # 搜索仓库
-            "get_file_contents",  # 读取文件
-            "list_commits",  # 查看提交历史
-            "search_code",  # 搜索代码
-            "get_issue",  # 获取 Issue
-        ]
+    # 检查缓存
+    if cache_key in _cached_agent_options:
+        logger.debug(f"使用缓存的 Agent 选项 (key={cache_key})")
+        return _cached_agent_options[cache_key]
 
-    all_tools = base_tools + arxiv_tools + github_tools
+    # 创建新配置
+    options = _create_agent_options_impl(max_turns, max_budget_usd)
 
-    # 获取模型配置
-    model = Config.get_anthropic_model()
+    # 存入缓存
+    _cached_agent_options[cache_key] = options
+    logger.debug(f"创建新的 Agent 选项并缓存 (key={cache_key})")
 
-    agent_definitions = {}
-    for name, config in agents.items():
-        if name == "observer":
-            continue  # Observer 单独处理，不在此处注册
-        agent_definitions[name] = AgentDefinition(
-            description=config["description"],
-            prompt=config["prompt"],
-            tools=all_tools,
-            model=model,
-        )
-
-    return ClaudeAgentOptions(
-        agents=agent_definitions,
-        setting_sources=["user", "project"],
-        env=env,
-        mcp_servers=mcp_servers,
-    )
+    return options
 
 
-async def run_single_agent(prompt: str, agent_name: str) -> str:
-    """运行单个代理（带重试机制）
+async def run_single_agent(prompt: str, agent_name: str) -> dict:
+    """运行单个代理（带完善的中间日志监听）
 
     Args:
         prompt: 用户提示词
         agent_name: 代理名称
 
     Returns:
-        代理响应文本
+        {
+            "response": str,  # 代理响应文本
+            "cost_usd": float,  # 成本（美元）
+            "num_turns": int,  # 对话轮数
+            "tool_calls": list[str],  # 工具调用列表
+            "local_id": str,  # 会话 ID
+        }
     """
-    logger.info(f"开始运行 agent: {agent_name}")
+    from claude_agent_sdk import (
+        AssistantMessage,
+        ResultMessage,
+        TextBlock,
+        ThinkingBlock,
+        ToolResultBlock,
+        ToolUseBlock,
+    )
+
+    logger.info(f"[{agent_name}] 开始运行 Agent")
+    logger.debug(f"[{agent_name}] Prompt 长度: {len(prompt)} 字符")
+
+    # 执行信息收集
+    execution_info = {
+        "response": "",
+        "cost_usd": 0.0,
+        "num_turns": 0,
+        "tool_calls": [],
+        "local_id": "",
+        "text_blocks": [],
+    }
 
     async def _query_agent():
         options = create_agent_options()
         response_text = []
+        turn_count = 0
+        tool_calls = []
+        local_id = ""
+        first_result = True
 
-        async for message in query(
-            prompt=prompt,
-            options=options,
-        ):
-            from claude_agent_sdk import AssistantMessage, TextBlock
-
+        async for message in query(prompt=prompt, options=options):
+            # AssistantMessage: AI 响应（文本或工具调用）
             if isinstance(message, AssistantMessage):
+                turn_count += 1
+                logger.debug(f"[{agent_name}] 收到消息 (第 {turn_count} 轮)")
+
                 for block in message.content:
+                    # 文本块 → 终端流式输出 + INFO 日志
                     if isinstance(block, TextBlock):
-                        response_text.append(block.text)
+                        text = block.text
+                        response_text.append(text)
+                        execution_info["text_blocks"].append(text)
+
+                        # 终端流式输出
+                        print(text, end="", flush=True)
+                        # 日志记录（INFO 级别）
+                        logger.info(f"[{agent_name}] [Text] {text[:100]}...")
+
+                    # 思考块 → 输出思考过程
+                    elif isinstance(block, ThinkingBlock):
+                        thinking = getattr(block, "thinking", "")
+                        if thinking:
+                            thinking_preview = thinking[:200] + "..." if len(thinking) > 200 else thinking
+                            logger.debug(f"[{agent_name}] [Thinking] {thinking_preview}")
+
+                    # 工具调用块 → 终端显示 + INFO 日志
+                    elif isinstance(block, ToolUseBlock):
+                        tool_name = block.name
+                        tool_use_id = getattr(block, "tool_use_id", "")
+                        tool_input = getattr(block, "input", {})
+                        tool_calls.append(tool_name)
+                        execution_info["tool_calls"].append(tool_name)
+
+                        # 终端输出
+                        print(f"\n[{tool_name}] id={tool_use_id}", end="", flush=True)
+                        # 详细日志输出
+                        if isinstance(tool_input, dict):
+                            import json
+                            input_str = json.dumps(tool_input, indent=2, ensure_ascii=False)
+                            logger.info(f"[{agent_name}] [Tool] {tool_name}(id={tool_use_id})")
+                            logger.debug(f"[{agent_name}] [ToolInput] {input_str}")
+                        else:
+                            logger.info(f"[{agent_name}] [Tool] {tool_name}(id={tool_use_id})")
+
+                    # 工具结果块 → 只日志，不终端输出
+                    elif isinstance(block, ToolResultBlock):
+                        tool_use_id = getattr(block, "tool_use_id", "")
+                        is_error = getattr(block, "is_error", False)
+                        result = getattr(block, "result", "")
+                        # 限制结果长度，避免日志过多
+                        if isinstance(result, str) and len(result) > 500:
+                            logger.info(f"[{agent_name}] [ToolResult] id={tool_use_id} error={is_error} (truncated)")
+                            logger.debug(f"[{agent_name}] [ToolResult] id={tool_use_id}:\n{result[:500]}...")
+                        else:
+                            logger.info(f"[{agent_name}] [ToolResult] id={tool_use_id} error={is_error}")
+                            if result:
+                                logger.debug(f"[{agent_name}] [ToolResult] id={tool_use_id}: {result}")
+
+            # ResultMessage: 执行结果（成本、统计信息）
+            elif isinstance(message, ResultMessage):
+                # 打印统计信息
+                print("\n")
+                session_id = message.session_id or ""
+                cost_usd = message.total_cost_usd or 0.0
+                result_turns = message.num_turns or turn_count
+
+                execution_info["session_id"] = session_id
+                execution_info["cost_usd"] = cost_usd
+                execution_info["num_turns"] = result_turns
+
+                # 只在第一次收到 ResultMessage 时记录
+                if first_result:
+                    logger.info(f"[{agent_name}] [Result] session_id={session_id}")
+                    first_result = False
+
+                # 日志记录成本和统计
+                logger.info(
+                    f"[{agent_name}] [Stats] 成本: ${cost_usd:.4f}, "
+                    f"轮数: {result_turns}, 工具调用: {len(tool_calls)}"
+                )
 
         result = "\n".join(response_text)
-        logger.info(f"Agent {agent_name} 响应完成，长度: {len(result)} 字符")
         return result
 
     try:
-        return await retry_async(_query_agent, max_retries=3, initial_delay=2.0, backoff_factor=2.0)
+        response = await retry_async(_query_agent, max_retries=3, initial_delay=2.0, backoff_factor=2.0)
+        execution_info["response"] = response
+
+        # 最终日志
+        logger.info(
+            f"[{agent_name}] 完成 - "
+            f"响应长度: {len(response)} 字符, "
+            f"成本: ${execution_info['cost_usd']:.4f}, "
+            f"轮数: {execution_info['num_turns']}, "
+            f"工具调用: {len(execution_info['tool_calls'])}"
+        )
+
+        return execution_info
     except Exception as e:
-        logger.error(f"Agent {agent_name} 运行失败: {e}", exc_info=True)
-        return f"[错误] Agent {agent_name} 执行失败: {e}"
+        logger.error(f"[{agent_name}] 运行失败: {e}", exc_info=True)
+        return {
+            "response": f"[错误] Agent {agent_name} 执行失败: {e}",
+            "cost_usd": 0.0,
+            "num_turns": 0,
+            "tool_calls": [],
+            "session_id": "",
+            "text_blocks": [],
+        }
 
 
 async def run_agents_parallel(issue_number: int, agents: list[str], context: str = "", comment_count: int = 0) -> dict:
-    """串行运行多个代理（函数名保持向后兼容）
-
-    注意：虽然函数名为 parallel，但实际改为串行执行以避免 Claude Agent SDK 的资源竞争问题。
+    """并行运行多个代理
 
     Args:
         issue_number: Issue 编号
@@ -313,7 +547,15 @@ async def run_agents_parallel(issue_number: int, agents: list[str], context: str
         comment_count: 评论数量（用于增强上下文）
 
     Returns:
-        {agent_name: response_text}
+        {
+            agent_name: {
+                "response": str,
+                "cost_usd": float,
+                "num_turns": int,
+                "tool_calls": list[str],
+                "session_id": str,
+            }
+        }
     """
     # 构建增强的上下文
     full_context = context
@@ -326,15 +568,31 @@ async def run_agents_parallel(issue_number: int, agents: list[str], context: str
 
 请以 [Agent: {{agent_name}}] 为前缀发布你的回复。"""
 
-    results = {}
+    results: dict[str, dict] = {}
+    total_cost = 0.0
 
-    # 串行执行以避免 Claude Agent SDK 资源竞争
-    for agent in agents:
-        prompt = base_prompt.format(agent_name=agent)
-        logger.info(f"串行执行 agent: {agent} ({agents.index(agent) + 1}/{len(agents)})")
-        response = await run_single_agent(prompt, agent)
-        results[agent] = response
+    async def run_agent_task(agent_name: str, prompt: str, results: dict[str, dict]) -> None:
+        """并行任务：运行单个 agent"""
+        logger.info(f"[Issue#{issue_number}] [并行] 开始执行 {agent_name}")
+        result = await run_single_agent(prompt, agent_name)
+        results[agent_name] = result
+        total_cost_local = result.get("cost_usd", 0.0)
+        logger.info(
+            f"[Issue#{issue_number}] {agent_name} 完成 - "
+            f"成本: ${total_cost_local:.4f}, "
+            f"轮数: {result.get('num_turns', 0)}, "
+            f"工具: {len(result.get('tool_calls', []))}"
+        )
 
+    # 使用 anyio.create_task_group 实现真正的并行执行
+    async with anyio.create_task_group() as tg:
+        for agent in agents:
+            prompt = base_prompt.format(agent_name=agent)
+            tg.start_soon(run_agent_task, agent, prompt, results)
+
+    # 汇总总成本
+    total_cost = sum(r.get("cost_usd", 0.0) for r in results.values())
+    logger.info(f"[Issue#{issue_number}] 所有 Agent 完成 - 总成本: ${total_cost:.4f}")
     return results
 
 
@@ -378,10 +636,21 @@ async def run_observer(issue_number: int, issue_title: str = "", issue_body: str
         agent_matrix=agent_matrix,
     )
 
-    response = await run_single_agent(prompt, "observer")
+    logger.info(f"[Observer] 开始分析 Issue #{issue_number}")
+    logger.debug(f"[Observer] Title: {issue_title[:50]}...")
+
+    result = await run_single_agent(prompt, "observer")
+
+    # 解析响应（从 dict 中提取 response 字段）
+    response_text = result.get("response", "")
+    logger.debug(f"[Observer] 响应长度: {len(response_text)} 字符")
 
     # 解析响应
-    return parse_observer_response(response, issue_number)
+    decision = parse_observer_response(response_text, issue_number)
+    decision["cost_usd"] = result.get("cost_usd", 0.0)
+    decision["num_turns"] = result.get("num_turns", 0)
+
+    return decision
 
 
 async def run_observer_batch(issue_data_list: list[dict]) -> list[dict]:
@@ -433,16 +702,26 @@ async def run_observer_batch(issue_data_list: list[dict]) -> list[dict]:
     return results
 
 
-def parse_observer_response(response: str, issue_number: int) -> dict:
+def parse_observer_response(response: str, issue_number: int | None = None) -> dict:
     """解析 Observer Agent 的响应
 
     Args:
-        response: Agent 响应文本
-        issue_number: Issue 编号
+        response: Agent 响应文本（YAML 格式）
+        issue_number: Issue 编号（可选，用于日志记录）
 
     Returns:
-        解析后的决策结果
+        解析后的决策结果 {
+            "should_trigger": bool,
+            "agent": str,
+            "comment": str,
+            "reason": str,
+            "analysis": str,
+        }
     """
+    # 如果提供了 issue_number，记录日志
+    if issue_number is not None:
+        logger.debug(f"解析 Issue #{issue_number} 的 Observer 响应")
+
     result = {
         "should_trigger": False,
         "agent": "",
@@ -451,57 +730,94 @@ def parse_observer_response(response: str, issue_number: int) -> dict:
         "analysis": "",
     }
 
-    # 简单的解析逻辑
-    lines = response.split("\n")
+    yaml_data = _try_parse_yaml(response)
+    if yaml_data is None:
+        return result
 
-    # 查找 action/should_trigger
-    for line in lines:
-        line_lower = line.lower().strip()
-        if "action: trigger" in line_lower or "should_trigger: true" in line_lower:
-            result["should_trigger"] = True
-        elif "action: skip" in line_lower or "should_trigger: false" in line_lower:
-            result["should_trigger"] = False
-            return result
-
-    # 查找 agent
-    for line in lines:
-        if line.startswith("agent:") or line.startswith("trigger_agent:"):
-            result["agent"] = line.split(":", 1)[1].strip().lower()
-            break
-
-    # 查找 comment
-    in_comment = False
-    comment_lines = []
-    for line in lines:
-        if "comment:" in line.lower() or "trigger_comment:" in line.lower():
-            in_comment = True
-            continue
-        if in_comment and line.startswith("---"):
-            break
-        if in_comment:
-            comment_lines.append(line)
-    result["comment"] = "\n".join(comment_lines).strip()
-
-    # 查找 reason
-    for line in lines:
-        if "reason:" in line.lower():
-            result["reason"] = line.split(":", 1)[1].strip()
-            break
-
-    # 查找 analysis
-    for line in lines:
-        if "analysis:" in line.lower():
-            result["analysis"] = line.split(":", 1)[1].strip()
-            break
+    result["should_trigger"] = yaml_data.get("should_trigger", False)
+    result["agent"] = yaml_data.get("agent", "") or yaml_data.get("trigger_agent", "")
+    result["comment"] = yaml_data.get("comment", "") or yaml_data.get("trigger_comment", "")
+    result["reason"] = yaml_data.get("reason", "") or yaml_data.get("skip_reason", "")
+    result["analysis"] = yaml_data.get("analysis", "")
 
     # 如果没有解析到触发评论，使用默认格式
     if result["should_trigger"] and result["agent"] and not result["comment"]:
-        agent_map = {
-            "moderator": "@Moderator 请分诊",
-            "reviewer_a": "@ReviewerA 评审",
-            "reviewer_b": "@ReviewerB 找问题",
-            "summarizer": "@Summarizer 汇总",
-        }
-        result["comment"] = agent_map.get(result["agent"], f"@{result['agent']}")
+        result["comment"] = _get_default_trigger_comment(result["agent"])
 
     return result
+
+
+def _try_parse_yaml(response: str) -> dict | None:
+    """尝试解析 YAML 格式的响应
+
+    Args:
+        response: Agent 响应文本
+
+    Returns:
+        解析后的字典，失败返回 None
+    """
+    import yaml
+
+    # 清理响应文本
+    text = response.strip()
+
+    # 检查是否包含 YAML 代码块标记
+    if "```yaml" in text:
+        # 提取 ```yaml 和 ``` 之间的内容
+        start = text.find("```yaml")
+        if start == -1:
+            start = text.find("```")
+        end = text.rfind("```")
+        if start != -1 and end != -1 and end > start:
+            # 找到代码块内容（跳过 ```yaml 行和 ``` 行）
+            lines = text[start:end].split("\n")
+            if len(lines) >= 2:
+                yaml_content = "\n".join(lines[1:])
+                try:
+                    return yaml.safe_load(yaml_content)
+                except yaml.YAMLError:
+                    pass
+    elif text.startswith("---"):
+        # 可能直接是 YAML 文档
+        try:
+            return yaml.safe_load(text)
+        except yaml.YAMLError:
+            pass
+
+    # 检查是否是简单的键值对格式（每行一个）
+    lines = text.split("\n")
+    yaml_like = True
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            yaml_like = False
+            break
+
+    if yaml_like:
+        try:
+            return yaml.safe_load(text)
+        except yaml.YAMLError:
+            pass
+
+    return None
+
+
+def _get_default_trigger_comment(agent: str) -> str:
+    """获取默认的触发评论
+
+    Args:
+        agent: Agent 名称
+
+    Returns:
+        默认的触发评论
+    """
+    agent_map = {
+        "moderator": "@Moderator 请分诊",
+        "reviewer_a": "@ReviewerA 评审",
+        "reviewer_b": "@ReviewerB 找问题",
+        "summarizer": "@Summarizer 汇总",
+        "observer": "@Observer",
+    }
+    return agent_map.get(agent, f"@{agent}")

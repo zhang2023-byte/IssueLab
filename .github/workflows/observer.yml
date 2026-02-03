@@ -18,6 +18,8 @@ permissions:
 
 jobs:
   observer-scan:
+    # 🔒 仅在主仓库运行，避免在fork仓库中不必要的定时执行
+    if: github.repository == 'gqy20/IssueLab'
     runs-on: ubuntu-latest
 
     steps:
@@ -63,10 +65,10 @@ jobs:
         run: |
           echo "=== 并行分析 ${{ steps.get_issues.outputs.issue_count }} 个 Issues ==="
 
-          # 使用新的批处理命令
+          # 🔥 使用新的 auto-trigger 参数替代 --post（避免bot评论触发问题）
           uv run python -m issuelab observe-batch \
             --issues "${{ steps.get_issues.outputs.issue_numbers }}" \
-            --post
+            --auto-trigger
 
           echo "=== 分析完成 ==="
         env:
@@ -75,6 +77,17 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           ARXIV_STORAGE_PATH: ${{ github.workspace }}/.arxiv-papers
-          ENABLE_ARXIV_MCP: true  # 已修复 MCP 超时问题
-          ENABLE_GITHUB_MCP: false  # 暂时关闭以测试性能
-          LOG_LEVEL: INFO
+          LOG_FILE: ${{ github.workspace }}/logs/observer_${{ github.run_id }}.log
+          LOG_LEVEL: DEBUG
+          ENABLE_ARXIV_MCP: false
+          ENABLE_GITHUB_MCP: false
+
+      # 上传日志文件
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observer-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 7
+          if-no-files-found: ignore
