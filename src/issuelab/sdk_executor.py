@@ -510,9 +510,7 @@ async def run_single_agent(prompt: str, agent_name: str) -> dict:
 
 
 async def run_agents_parallel(issue_number: int, agents: list[str], context: str = "", comment_count: int = 0) -> dict:
-    """串行运行多个代理（函数名保持向后兼容）
-
-    注意：虽然函数名为 parallel，但实际改为串行执行以避免 Claude Agent SDK 的资源竞争问题。
+    """并行运行多个代理
 
     Args:
         issue_number: Issue 编号
@@ -527,7 +525,7 @@ async def run_agents_parallel(issue_number: int, agents: list[str], context: str
                 "cost_usd": float,
                 "num_turns": int,
                 "tool_calls": list[str],
-                "local_id": str,
+                "session_id": str,
             }
         }
     """
@@ -542,25 +540,30 @@ async def run_agents_parallel(issue_number: int, agents: list[str], context: str
 
 请以 [Agent: {{agent_name}}] 为前缀发布你的回复。"""
 
-    results = {}
+    results: dict[str, dict] = {}
     total_cost = 0.0
 
-    # 串行执行以避免 Claude Agent SDK 资源竞争
-    for agent in agents:
-        prompt = base_prompt.format(agent_name=agent)
-        logger.info(f"[Issue#{issue_number}] 执行 agent: {agent} ({agents.index(agent) + 1}/{len(agents)})")
-        logger.debug(f"[Issue#{issue_number}] Context 长度: {len(full_context)} 字符")
-
-        result = await run_single_agent(prompt, agent)
-        results[agent] = result
-        total_cost += result.get("cost_usd", 0.0)
-
+    async def run_agent_task(agent_name: str, prompt: str, results: dict[str, dict]) -> None:
+        """并行任务：运行单个 agent"""
+        logger.info(f"[Issue#{issue_number}] [并行] 开始执行 {agent_name}")
+        result = await run_single_agent(prompt, agent_name)
+        results[agent_name] = result
+        total_cost_local = result.get("cost_usd", 0.0)
         logger.info(
-            f"[Issue#{issue_number}] {agent} 完成 - "
-            f"成本: ${result.get('cost_usd', 0):.4f}, "
+            f"[Issue#{issue_number}] {agent_name} 完成 - "
+            f"成本: ${total_cost_local:.4f}, "
+            f"轮数: {result.get('num_turns', 0)}, "
             f"工具: {len(result.get('tool_calls', []))}"
         )
 
+    # 使用 anyio.create_task_group 实现真正的并行执行
+    async with anyio.create_task_group() as tg:
+        for agent in agents:
+            prompt = base_prompt.format(agent_name=agent)
+            tg.start_soon(run_agent_task, agent, prompt, results)
+
+    # 汇总总成本
+    total_cost = sum(r.get("cost_usd", 0.0) for r in results.values())
     logger.info(f"[Issue#{issue_number}] 所有 Agent 完成 - 总成本: ${total_cost:.4f}")
     return results
 
