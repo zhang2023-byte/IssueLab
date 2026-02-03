@@ -368,42 +368,126 @@ def create_agent_options(
     return options
 
 
-async def run_single_agent(prompt: str, agent_name: str) -> str:
-    """运行单个代理（带重试机制）
+async def run_single_agent(prompt: str, agent_name: str) -> dict:
+    """运行单个代理（带完善的中间日志监听）
 
     Args:
         prompt: 用户提示词
         agent_name: 代理名称
 
     Returns:
-        代理响应文本
+        {
+            "response": str,  # 代理响应文本
+            "cost_usd": float,  # 成本（美元）
+            "num_turns": int,  # 对话轮数
+            "tool_calls": list[str],  # 工具调用列表
+            "local_id": str,  # 会话 ID
+        }
     """
-    logger.info(f"开始运行 agent: {agent_name}")
+    from claude_agent_sdk import (
+        AssistantMessage,
+        ResultMessage,
+        TextBlock,
+        ToolUseBlock,
+    )
+
+    logger.info(f"[{agent_name}] 开始运行 Agent")
+    logger.debug(f"[{agent_name}] Prompt 长度: {len(prompt)} 字符")
+
+    # 执行信息收集
+    execution_info = {
+        "response": "",
+        "cost_usd": 0.0,
+        "num_turns": 0,
+        "tool_calls": [],
+        "local_id": "",
+        "text_blocks": [],
+    }
 
     async def _query_agent():
         options = create_agent_options()
         response_text = []
+        turn_count = 0
+        tool_calls = []
+        local_id = ""
+        first_result = True
 
-        async for message in query(
-            prompt=prompt,
-            options=options,
-        ):
-            from claude_agent_sdk import AssistantMessage, TextBlock
-
+        async for message in query(prompt=prompt, options=options):
+            # AssistantMessage: AI 响应（文本或工具调用）
             if isinstance(message, AssistantMessage):
+                turn_count += 1
+                logger.debug(f"[{agent_name}] 收到消息 (第 {turn_count} 轮)")
+
                 for block in message.content:
+                    # 文本块
                     if isinstance(block, TextBlock):
-                        response_text.append(block.text)
+                        text = block.text
+                        response_text.append(text)
+                        execution_info["text_blocks"].append(text)
+                        # 记录部分内容（不超过 200 字符）
+                        text_preview = text[:200].replace("\n", " ")
+                        logger.debug(f"[{agent_name}] [TextBlock] {text_preview}...")
+                    # 工具调用块
+                    elif isinstance(block, ToolUseBlock):
+                        tool_name = block.name
+                        tool_input = getattr(block, "input", {})
+                        tool_calls.append(tool_name)
+                        execution_info["tool_calls"].append(tool_name)
+
+                        # 记录工具调用详情
+                        if isinstance(tool_input, dict):
+                            input_preview = str(tool_input)[:100]
+                            logger.info(f"[{agent_name}] [ToolUse] {tool_name}({input_preview})")
+                        else:
+                            logger.info(f"[{agent_name}] [ToolUse] {tool_name}")
+
+            # ResultMessage: 执行结果（成本、统计信息）
+            elif isinstance(message, ResultMessage):
+                local_id = message.local_id or ""
+                cost_usd = message.total_cost_usd or 0.0
+
+                execution_info["local_id"] = local_id
+                execution_info["cost_usd"] = cost_usd
+                execution_info["num_turns"] = turn_count
+
+                # 只在第一次收到 ResultMessage 时记录
+                if first_result:
+                    logger.info(f"[{agent_name}] [Result] local_id={local_id}")
+                    first_result = False
+
+                # 记录成本和统计
+                logger.info(
+                    f"[{agent_name}] [Stats] 成本: ${cost_usd:.4f}, "
+                    f"轮数: {turn_count}, 工具调用: {len(tool_calls)}"
+                )
 
         result = "\n".join(response_text)
-        logger.info(f"Agent {agent_name} 响应完成，长度: {len(result)} 字符")
         return result
 
     try:
-        return await retry_async(_query_agent, max_retries=3, initial_delay=2.0, backoff_factor=2.0)
+        response = await retry_async(_query_agent, max_retries=3, initial_delay=2.0, backoff_factor=2.0)
+        execution_info["response"] = response
+
+        # 最终日志
+        logger.info(
+            f"[{agent_name}] 完成 - "
+            f"响应长度: {len(response)} 字符, "
+            f"成本: ${execution_info['cost_usd']:.4f}, "
+            f"轮数: {execution_info['num_turns']}, "
+            f"工具调用: {len(execution_info['tool_calls'])}"
+        )
+
+        return execution_info
     except Exception as e:
-        logger.error(f"Agent {agent_name} 运行失败: {e}", exc_info=True)
-        return f"[错误] Agent {agent_name} 执行失败: {e}"
+        logger.error(f"[{agent_name}] 运行失败: {e}", exc_info=True)
+        return {
+            "response": f"[错误] Agent {agent_name} 执行失败: {e}",
+            "cost_usd": 0.0,
+            "num_turns": 0,
+            "tool_calls": [],
+            "local_id": "",
+            "text_blocks": [],
+        }
 
 
 async def run_agents_parallel(issue_number: int, agents: list[str], context: str = "", comment_count: int = 0) -> dict:
@@ -418,7 +502,15 @@ async def run_agents_parallel(issue_number: int, agents: list[str], context: str
         comment_count: 评论数量（用于增强上下文）
 
     Returns:
-        {agent_name: response_text}
+        {
+            agent_name: {
+                "response": str,
+                "cost_usd": float,
+                "num_turns": int,
+                "tool_calls": list[str],
+                "local_id": str,
+            }
+        }
     """
     # 构建增强的上下文
     full_context = context
@@ -432,14 +524,25 @@ async def run_agents_parallel(issue_number: int, agents: list[str], context: str
 请以 [Agent: {{agent_name}}] 为前缀发布你的回复。"""
 
     results = {}
+    total_cost = 0.0
 
     # 串行执行以避免 Claude Agent SDK 资源竞争
     for agent in agents:
         prompt = base_prompt.format(agent_name=agent)
-        logger.info(f"串行执行 agent: {agent} ({agents.index(agent) + 1}/{len(agents)})")
-        response = await run_single_agent(prompt, agent)
-        results[agent] = response
+        logger.info(f"[Issue#{issue_number}] 执行 agent: {agent} ({agents.index(agent) + 1}/{len(agents)})")
+        logger.debug(f"[Issue#{issue_number}] Context 长度: {len(full_context)} 字符")
 
+        result = await run_single_agent(prompt, agent)
+        results[agent] = result
+        total_cost += result.get("cost_usd", 0.0)
+
+        logger.info(
+            f"[Issue#{issue_number}] {agent} 完成 - "
+            f"成本: ${result.get('cost_usd', 0):.4f}, "
+            f"工具: {len(result.get('tool_calls', []))}"
+        )
+
+    logger.info(f"[Issue#{issue_number}] 所有 Agent 完成 - 总成本: ${total_cost:.4f}")
     return results
 
 
@@ -483,10 +586,21 @@ async def run_observer(issue_number: int, issue_title: str = "", issue_body: str
         agent_matrix=agent_matrix,
     )
 
-    response = await run_single_agent(prompt, "observer")
+    logger.info(f"[Observer] 开始分析 Issue #{issue_number}")
+    logger.debug(f"[Observer] Title: {issue_title[:50]}...")
+
+    result = await run_single_agent(prompt, "observer")
+
+    # 解析响应（从 dict 中提取 response 字段）
+    response_text = result.get("response", "")
+    logger.debug(f"[Observer] 响应长度: {len(response_text)} 字符")
 
     # 解析响应
-    return parse_observer_response(response, issue_number)
+    decision = parse_observer_response(response_text, issue_number)
+    decision["cost_usd"] = result.get("cost_usd", 0.0)
+    decision["num_turns"] = result.get("num_turns", 0)
+
+    return decision
 
 
 async def run_observer_batch(issue_data_list: list[dict]) -> list[dict]:
