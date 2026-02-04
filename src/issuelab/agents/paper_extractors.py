@@ -3,13 +3,54 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
+
+
+def _extract_issue_file_path(text: str) -> str:
+    if not text:
+        return ""
+    match = re.search(r"\*\*Issue 内容文件\*\*:\s*(\S+)", text)
+    if match:
+        return match.group(1).strip()
+    match = re.search(r"Issue 内容文件:\s*(\S+)", text)
+    if match:
+        return match.group(1).strip()
+    match = re.search(r"内容已保存至文件:\s*(\S+)", text)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
+def _extract_issue_body_from_file(file_path: str) -> str:
+    try:
+        content = Path(file_path).read_text(encoding="utf-8")
+    except Exception:
+        return ""
+
+    marker = "## 正文"
+    if marker in content:
+        section = content.split(marker, 1)[1]
+        # stop at comments section
+        for end_marker in ("## 评论", "# 评论"):
+            if end_marker in section:
+                section = section.split(end_marker, 1)[0]
+                break
+        return section.strip()
+
+    return content.strip()
 
 
 def extract_issue_body(context: str) -> str:
     """Extract the raw Issue body from the execute-context string."""
     if not context:
         return ""
+
+    file_path = _extract_issue_file_path(context)
+    if file_path:
+        body = _extract_issue_body_from_file(file_path)
+        if body:
+            return body
 
     marker = "**Issue 内容**:\n"
     if marker in context:
