@@ -18,6 +18,7 @@ Environment:
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import os
@@ -307,26 +308,18 @@ def analyze_with_observer(papers: list[dict], query: str, token: str) -> list[di
         logger.warning("文献数量不足 2 篇，无法进行智能推荐")
         return []
 
-    # 转换格式以适配现有 observer
-    adapted_papers = []
-    for _i, paper in enumerate(papers):
-        adapted_papers.append(
-            {
-                "id": paper["pmid"],
-                "title": paper["title"],
-                "summary": paper.get("keywords", [])[:3],  # 用关键词替代摘要
-                "url": paper["url"],
-                "pdf_url": paper["doi"],  # 用 DOI 替代 PDF
-                "authors": paper["authors"],
-                "published": paper["pubdate"],
-                "category": paper["journal"],
-            }
-        )
-
-    # 调用 Observer
+    # 调用 PubMed Observer 智能体
     try:
-        # 这里需要创建 pubmed_observer，暂时使用启发式规则
-        recommended = heuristic_selection(papers, query)
+        from pathlib import Path
+
+        # 动态导入 SDK
+        sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+        from issuelab.agents.observer import run_pubmed_observer_for_papers
+
+        logger.debug("[Observer] 调用 run_pubmed_observer_for_papers...")
+        recommended = asyncio.run(run_pubmed_observer_for_papers(papers, query))
+        logger.info(f"[Observer] 分析完成，推荐 {len(recommended)} 篇文献")
+        logger.debug(f"[Observer] 推荐结果: {recommended}")
         return recommended
     except Exception as e:
         logger.error(f"[Observer] 分析失败: {e}")
@@ -415,11 +408,12 @@ def create_issues(recommended: list[dict], repo_name: str, token: str, query: st
             f"""### {i + 1}. {paper["title"]}
 
 - **PMID**: [{paper["pmid"]}]({paper["url"]})
-- **DOI**: [{paper["doi"]}](https://doi.org/{paper["doi"]}) if paper['doi'] else 'N/A'
+- **DOI**: {f"[{paper['doi']}](https://doi.org/{paper['doi']})" if paper.get('doi') else "N/A"}
 - **期刊**: {paper["journal"]}
 - **发表日期**: {paper["pubdate"]}
 - **作者**: {paper["authors"]}
-- **推荐理由**: {paper["reason"]}"""
+- **推荐理由**: {paper.get("reason", "")}
+- **推荐摘要**: {paper.get("summary", "")}"""
             for i, paper in enumerate(recommended)
         ]
     )
@@ -474,10 +468,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     # 环境变量覆盖
-    email = args.email or os.environ.get("PUBMED_EMAIL")
-    if not email:
-        logger.error("请提供 --email 参数或设置 PUBMED_EMAIL 环境变量")
-        return 1
+    email = args.email or os.environ.get("PUBMED_EMAIL") or "qingyu_ge@foxmail.com"
 
     # 日志级别
     log_level = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
