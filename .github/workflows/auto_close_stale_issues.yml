@@ -6,6 +6,11 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
+      max_comments:
+        description: 'Max comments threshold (default: 200)'
+        required: false
+        default: '200'
+        type: string
       dry_run:
         description: 'Dry run (no changes)'
         required: false
@@ -19,10 +24,10 @@ jobs:
   close-stale-issues:
     runs-on: ubuntu-latest
     steps:
-      - name: Close issues with >200 comments
+      - name: Close issues with >N comments
         run: |
           # 配置
-          MAX_COMMENTS=200
+          MAX_COMMENTS=${{ github.event.inputs.max_comments || '200' }}
           DRY_RUN=${{ github.event.inputs.dry_run || 'true' }}
           REPO="${{ github.repository }}"
 
@@ -31,9 +36,7 @@ jobs:
           echo "🔬 模式: $([ "$DRY_RUN" = "true" ] && echo "干运行" || echo "实际执行")"
           echo ""
 
-          # 获取超过 200 回复的 open issue
-          # GitHub GraphQL API 不直接支持按评论数过滤，用搜索 API
-          # search API: comments:>200 匹配评论数
+          # 获取超过 N 回复的 open issue
           ISSUES=$(gh issue list \
             --state open \
             --limit 300 \
@@ -57,7 +60,6 @@ jobs:
             echo "     回复数: $COMMENTS"
 
             if [ "$DRY_RUN" = "false" ]; then
-              # 添加关闭原因标签并关闭
               gh issue close $issue_num \
                 --comment "🤖 此 issue 已超过 $MAX_COMMENTS 回复，自动关闭。如需继续讨论，请开启新 issue。"
               echo "     → 已关闭"
