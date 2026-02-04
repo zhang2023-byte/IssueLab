@@ -45,7 +45,7 @@ jobs:
             --state open \
             --limit 300 \
             --json number,title,comments \
-            --jq --argjson max "$MAX_COMMENTS" '.[] | select(.comments > $max) | .number')
+            --jq ".[] | select(.comments > $MAX_COMMENTS) | .number")
 
           if [ -z "$ISSUES" ]; then
             echo "✅ 没有需要关闭的 issue"
