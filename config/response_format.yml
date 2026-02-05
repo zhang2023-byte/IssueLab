@@ -1,6 +1,13 @@
 version: 1
 force_normalize: false
 
+structured_fields:
+  - summary
+  - findings
+  - recommendations
+  - mentions
+  - confidence
+
 sections:
   summary: "## Summary"
   findings: "## Key Findings"
@@ -13,7 +20,11 @@ limits:
   findings_max_chars: 160
   actions_max_count: 3
   actions_max_chars: 160
+  mentions_max_count: 5
 
 rules:
   mentions_only_in_actions: true
   yaml_required: true
+
+notes:
+  - mentions is an optional list of GitHub usernames (without @). Use it only when explicit notification is needed.
