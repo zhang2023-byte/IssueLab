@@ -43,18 +43,8 @@ async def run_observer(issue_number: int, issue_title: str = "", issue_body: str
             "error": "Observer agent not found",
         }
 
-    # 获取 prompt（移除 frontmatter）
-    prompt_template = observer_config["prompt"]
-    lines = prompt_template.split("\n")
-    content_lines = []
-    in_frontmatter = False
-    for line in lines:
-        if line.strip() == "---":
-            in_frontmatter = not in_frontmatter
-            continue
-        if not in_frontmatter:
-            content_lines.append(line)
-    prompt = "\n".join(content_lines)
+    # 获取 prompt（discover_agents 已移除 frontmatter）
+    prompt = observer_config["prompt"]
 
     # Issue 分析模式任务说明
     issue_task = """请分析以下 GitHub Issue 并决定是否需要触发其他 Agent：
@@ -240,18 +230,8 @@ async def run_observer_for_papers(papers: list[dict], return_result: bool = Fals
     # 构建论文上下文
     papers_context = build_papers_for_observer(papers)
 
-    # 获取 prompt（移除 frontmatter）
-    prompt_template = arxiv_observer_config["prompt"]
-    lines = prompt_template.split("\n")
-    content_lines = []
-    in_frontmatter = False
-    for line in lines:
-        if line.strip() == "---":
-            in_frontmatter = not in_frontmatter
-            continue
-        if not in_frontmatter:
-            content_lines.append(line)
-    prompt = "\n".join(content_lines)
+    # 获取 prompt（discover_agents 已移除 frontmatter）
+    prompt = arxiv_observer_config["prompt"]
 
     # 替换占位符
     prompt = prompt.replace("__PAPERS_CONTEXT__", papers_context)
@@ -314,18 +294,8 @@ async def run_pubmed_observer_for_papers(
     # 构建文献上下文
     papers_context = build_pubmed_papers_for_observer(papers, query)
 
-    # 获取 prompt（移除 frontmatter）
-    prompt_template = pubmed_observer_config["prompt"]
-    lines = prompt_template.split("\n")
-    content_lines = []
-    in_frontmatter = False
-    for line in lines:
-        if line.strip() == "---":
-            in_frontmatter = not in_frontmatter
-            continue
-        if not in_frontmatter:
-            content_lines.append(line)
-    prompt = "\n".join(content_lines)
+    # 获取 prompt（discover_agents 已移除 frontmatter）
+    prompt = pubmed_observer_config["prompt"]
 
     # 替换占位符
     prompt = prompt.replace("__PAPERS_CONTEXT__", papers_context)
