@@ -113,6 +113,43 @@ def format_mcp_servers_for_prompt(agent_name: str | None, root_dir: Path | None 
     return "\n".join(lines)
 
 
+def _get_agent_cwd(agent_name: str | None, root_dir: Path | None = None) -> Path:
+    """根据 agent 选择 cwd（用于加载 per-agent skills）"""
+    root = root_dir or AGENTS_DIR.parent
+    if not agent_name:
+        return root
+
+    agent_root = root / "agents" / agent_name
+    agent_skills = agent_root / ".claude" / "skills"
+    if agent_skills.exists():
+        return agent_root
+
+    return root
+
+
+def _discover_skills_in_path(base: Path) -> list[str]:
+    """列出指定路径下的 skills 名称"""
+    skills_dir = base / ".claude" / "skills"
+    if not skills_dir.exists():
+        return []
+
+    names = []
+    for child in skills_dir.iterdir():
+        if not child.is_dir():
+            continue
+        skill_file = child / "SKILL.md"
+        if skill_file.exists():
+            names.append(child.name)
+    return sorted(names)
+
+
+def _skills_signature(cwd: Path) -> str:
+    """生成技能列表签名（用于缓存键）"""
+    project_skills = _discover_skills_in_path(cwd)
+    user_skills = _discover_skills_in_path(Path(os.path.expanduser("~")))
+    return json.dumps({"project": project_skills, "user": user_skills}, ensure_ascii=True)
+
+
 def _run_async_in_thread(coro, timeout_ms: int) -> Any:
     """在独立线程中运行 async 任务，避免与当前事件循环冲突"""
     timeout_sec = max(timeout_ms, 0) / 1000.0
@@ -187,6 +224,7 @@ def _create_agent_options_impl(
     *,
     agent_name: str | None,
     mcp_servers: dict[str, Any],
+    cwd: Path,
 ) -> ClaudeAgentOptions:
     """创建 Agent 选项的实际实现（无缓存）"""
     env = Config.get_anthropic_env()
@@ -206,7 +244,7 @@ def _create_agent_options_impl(
 
     agents = discover_agents()
 
-    base_tools = ["Read", "Write", "Bash"]
+    base_tools = ["Read", "Write", "Bash", "Skill"]
     all_tools = base_tools
     model = Config.get_anthropic_model()
 
@@ -236,6 +274,7 @@ def _create_agent_options_impl(
         permission_mode="bypassPermissions",
         allowed_tools=allowed_tools,
         mcp_servers=mcp_servers,
+        cwd=str(cwd),
         stderr=sdk_stderr_handler,  # 捕获 SDK 内部详细日志
     )
 
@@ -278,6 +317,19 @@ def create_agent_options(
     if os.environ.get("MCP_LOG_DETAIL") == "1":
         logger.debug("MCP servers detail for agent '%s': %s", agent_name or "default", mcp_servers)
 
+    cwd = _get_agent_cwd(agent_name)
+    project_skills = _discover_skills_in_path(cwd)
+    user_skills = _discover_skills_in_path(Path(os.path.expanduser("~")))
+    if project_skills or user_skills:
+        logger.info(
+            "Skills loaded for agent '%s': project=%s user=%s",
+            agent_name or "default",
+            ", ".join(project_skills) if project_skills else "(none)",
+            ", ".join(user_skills) if user_skills else "(none)",
+        )
+    else:
+        logger.info("No skills configured for agent '%s'", agent_name or "default")
+
     if os.environ.get("MCP_LOG_TOOLS") == "1" and mcp_servers:
         timeout_ms = int(os.environ.get("MCP_LIST_TOOLS_TIMEOUT_MS", "3000"))
         for name, cfg in mcp_servers.items():
@@ -286,7 +338,13 @@ def create_agent_options(
                 logger.info("MCP tools for '%s': %s", name, ", ".join(sorted(tools)))
             else:
                 logger.info("MCP tools for '%s': (none or unavailable)", name)
-    cache_key = (effective_max_turns, effective_max_budget, agent_name or "", _mcp_cache_key(mcp_servers))
+    cache_key = (
+        effective_max_turns,
+        effective_max_budget,
+        agent_name or "",
+        _mcp_cache_key(mcp_servers),
+        _skills_signature(cwd),
+    )
 
     # 检查缓存
     if cache_key in _cached_agent_options:
@@ -299,6 +357,7 @@ def create_agent_options(
         max_budget_usd,
         agent_name=agent_name,
         mcp_servers=mcp_servers,
+        cwd=cwd,
     )
 
     # 存入缓存

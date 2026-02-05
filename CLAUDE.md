@@ -74,8 +74,10 @@ trigger_conditions:
 - `reviewer_b` - Critical review: vulnerability identification
 - `summarizer` - Consensus extraction, action item generation
 - `observer` - Analyzes issues, decides agent triggering
+- `arxiv_observer` - Analyzes and recommends arXiv papers from issue content
+- `pubmed_observer` - Analyzes and recommends PubMed literature from issue content
 
-**User Custom Agents:** Fork the repo, add `agents/<username>/agent.yml` and `agents/<username>/prompt.md`.
+**User Custom Agents:** Fork the repo, add `agents/<username>/agent.yml` and `agents/<username>/prompt.md`. Registered in `src/issuelab/agents/registry.py` via `AGENT_NAMES` and `BUILTIN_AGENTS` constants.
 
 ### Trigger Mechanisms
 
@@ -88,6 +90,14 @@ trigger_conditions:
    - `/quiet` - Add `bot:quiet` label to silence
 
 3. **Label**: Add `state:ready-for-review` to trigger full review
+
+### MCP Configuration
+
+MCP tools can be configured globally or per-agent:
+- Global: `.mcp.json`
+- Per-agent: `agents/<username>/.mcp.json` (overrides global)
+- Template: `agents/_template/.mcp.json`
+- Prompt placeholder: `{mcp_servers}` in prompt.md shows loaded MCP list
 
 ## Environment Variables
 
@@ -106,9 +116,9 @@ trigger_conditions:
 
 ```python
 SCENE_CONFIGS = {
-    "quick": AgentConfig(max_turns=2, max_budget_usd=0.20, timeout_seconds=60),
-    "review": AgentConfig(max_turns=3, max_budget_usd=0.50, timeout_seconds=180),
-    "deep": AgentConfig(max_turns=5, max_budget_usd=1.00, timeout_seconds=300),
+    "quick": AgentConfig(max_turns=10, max_budget_usd=0.20, timeout_seconds=60),
+    "review": AgentConfig(max_turns=25, max_budget_usd=0.50, timeout_seconds=180),
+    "deep": AgentConfig(max_turns=25, max_budget_usd=1.00, timeout_seconds=300),
 }
 ```
 
