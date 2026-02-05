@@ -12,12 +12,24 @@ import subprocess
 from typing import Any
 
 from issuelab.mention_policy import (
+    build_mention_section,
     clean_mentions_in_text,
     extract_mentions,
     filter_mentions,
 )
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "build_mention_section",
+    "clean_mentions_in_text",
+    "extract_mentions",
+    "filter_mentions",
+    "trigger_mentioned_agents",
+    "process_agent_response",
+    "should_auto_close",
+    "close_issue",
+]
 
 
 def trigger_mentioned_agents(
