@@ -64,7 +64,9 @@ class TestMainTriggerComment:
         from issuelab import __main__ as main_mod
 
         monkeypatch.setenv("ISSUELAB_TRIGGER_COMMENT", "@agent please focus on this")
-        monkeypatch.setattr(main_mod, "get_issue_info", lambda *a, **k: {"title": "t", "body": "b", "comments": "", "comment_count": 0})
+        monkeypatch.setattr(
+            main_mod, "get_issue_info", lambda *a, **k: {"title": "t", "body": "b", "comments": "", "comment_count": 0}
+        )
 
         with patch("issuelab.tools.github.write_issue_context_file", lambda *a, **k: "/tmp/issue_1.md"):
             captured = {}
@@ -109,9 +111,7 @@ class TestObserveBatchUsesGetIssueInfo:
         monkeypatch.setattr(main_mod, "get_issue_info", fake_get_issue_info)
         from issuelab import tools as tools_pkg
 
-        monkeypatch.setattr(
-            tools_pkg.github, "write_issue_context_file", lambda *a, **k: f"/tmp/issue_{a[0]}.md"
-        )
+        monkeypatch.setattr(tools_pkg.github, "write_issue_context_file", lambda *a, **k: f"/tmp/issue_{a[0]}.md")
         monkeypatch.setattr(
             main_mod.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("subprocess.run called"))
         )

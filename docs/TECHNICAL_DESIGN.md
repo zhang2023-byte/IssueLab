@@ -189,13 +189,13 @@ enabled: true
 for repository in target_repositories:
     # 1. 生成 JWT
     jwt_token = generate_github_app_jwt(app_id, private_key)
-    
+
     # 2. 获取 Installation ID
     installation_id = get_installation_id(repository, jwt_token)
-    
+
     # 3. 生成 Installation Token
     access_token = generate_installation_token(installation_id, jwt_token)
-    
+
     # 4. 触发 workflow
     dispatch_workflow(repository, access_token)
 ```
@@ -271,20 +271,20 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 def dispatch_to_multiple_repos(repositories: list[str]) -> dict:
     """并行 dispatch 到多个仓库"""
     results = {}
-    
+
     with ThreadPoolExecutor(max_workers=5) as executor:
         future_to_repo = {
             executor.submit(dispatch_to_repo, repo): repo
             for repo in repositories
         }
-        
+
         for future in as_completed(future_to_repo):
             repo = future_to_repo[future]
             try:
                 results[repo] = future.result()
             except Exception as e:
                 results[repo] = {"error": str(e)}
-    
+
     return results
 ```
 
@@ -301,7 +301,7 @@ def dispatch_to_multiple_repos(repositories: list[str]) -> dict:
 GitHub Actions 安全机制：
 
 ```
-github-actions bot 创建的评论 
+github-actions bot 创建的评论
     ↓
 不触发 issue_comment 事件
     ↓
@@ -352,13 +352,13 @@ Observer 调用 dispatch → 跨仓库触发 → 用户 agent 执行
 ```python
 class ObserverTrigger:
     """Observer 自动触发 agent 的核心逻辑"""
-    
+
     def auto_trigger_agent(self, agent_name: str, issue_number: int):
         """根据 agent 类型选择触发方式"""
-        
+
         # 1. 查找 agent 配置
         agent_config = self.load_agent_config(agent_name)
-        
+
         # 2. 判断是内置还是用户 agent
         if agent_config.get("type") == "builtin":
             # 内置：添加 label
@@ -383,7 +383,7 @@ def test_observer_trigger_builtin_agent():
     """测试触发内置 agent（通过 label）"""
     trigger = ObserverTrigger()
     trigger.auto_trigger_agent("moderator", issue_number=1)
-    
+
     # 验证：添加了 label
     assert "bot:trigger-moderator" in get_issue_labels(1)
 
@@ -391,7 +391,7 @@ def test_observer_trigger_user_agent():
     """测试触发用户 agent（通过 dispatch）"""
     trigger = ObserverTrigger()
     trigger.auto_trigger_agent("alice", issue_number=1)
-    
+
     # 验证：发送了 dispatch
     assert dispatch_was_called(repository="alice/IssueLab")
 ```
@@ -402,10 +402,10 @@ def test_observer_trigger_user_agent():
 def auto_trigger_agent(self, agent_name: str, issue_number: int):
     """自动触发 agent"""
     agent_config = self.registry.get_agent(agent_name)
-    
+
     if not agent_config or not agent_config.get("enabled"):
         return
-    
+
     if agent_config.get("type") == "builtin":
         self.github.add_label(issue_number, f"bot:trigger-{agent_name}")
     else:

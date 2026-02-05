@@ -54,11 +54,11 @@ your-github-id/
                         # - 能力描述
                         # - 行为准则
                         # - 个性特质
-                        
+
 └── .mcp.json           # MCP 配置（可选）
                         # - 声明 mcpServers
                         # - 用于接入外部工具
-                        
+
 └── .claude/skills/      # Skills（可选，可在 agent.yml 中关闭）
                         # - 放置 SKILL.md（技能）
 

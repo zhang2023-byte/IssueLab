@@ -57,11 +57,7 @@ class Config:
 
         优先级: PAT_TOKEN > GH_TOKEN > GITHUB_TOKEN
         """
-        return (
-            os.environ.get("PAT_TOKEN")
-            or os.environ.get("GH_TOKEN")
-            or os.environ.get("GITHUB_TOKEN", "")
-        )
+        return os.environ.get("PAT_TOKEN") or os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
 
     @staticmethod
     def prepare_github_env() -> dict:

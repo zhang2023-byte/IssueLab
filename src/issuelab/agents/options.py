@@ -275,7 +275,9 @@ def _subagents_signature_from_dir(path: Path) -> list[tuple[str, float]]:
     return sorted(entries)
 
 
-def _subagents_signature_for_cache(project_entries: list[tuple[str, float]], user_entries: list[tuple[str, float]]) -> str:
+def _subagents_signature_for_cache(
+    project_entries: list[tuple[str, float]], user_entries: list[tuple[str, float]]
+) -> str:
     """生成 subagents 缓存签名（包含 mtime）"""
     return json.dumps({"project": project_entries, "user": user_entries}, ensure_ascii=True)
 
@@ -286,6 +288,7 @@ def _run_async_in_thread(coro, timeout_ms: int) -> Any:
 
     def _runner():
         import anyio
+
         async def _async_runner():
             return await coro
 
@@ -458,9 +461,7 @@ def create_agent_options(
     feature_flags = _get_agent_feature_flags(agent_name)
     # 使用默认值 + per-agent 覆盖
     effective_max_turns = (
-        max_turns
-        if max_turns is not None
-        else int(overrides.get("max_turns", AgentConfig().max_turns))
+        max_turns if max_turns is not None else int(overrides.get("max_turns", AgentConfig().max_turns))
     )
     effective_max_budget = (
         max_budget_usd

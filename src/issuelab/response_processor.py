@@ -12,7 +12,6 @@ import subprocess
 from typing import Any
 
 from issuelab.mention_policy import (
-    build_mention_section,
     clean_mentions_in_text,
     extract_mentions,
     filter_mentions,
@@ -27,7 +26,7 @@ def trigger_mentioned_agents(
     issue_title: str,
     issue_body: str,
     policy: dict | None = None,
-    ) -> tuple[dict[str, bool], list[str], list[str]]:
+) -> tuple[dict[str, bool], list[str], list[str]]:
     """
     解析agent response中的@mentions，应用策略过滤，并触发允许的agent
 

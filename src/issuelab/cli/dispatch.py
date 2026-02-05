@@ -546,9 +546,7 @@ def main(argv: list[str] | None = None) -> int:
         token = get_token_for_repository(repository, app_id, private_key)
         if not token:
             print(f"[WARNING] Failed to get token for {repository}", file=sys.stderr)
-            failed_agents.append(
-                {"username": username, "repository": repository, "error": "TOKEN_GENERATION_FAILED"}
-            )
+            failed_agents.append({"username": username, "repository": repository, "error": "TOKEN_GENERATION_FAILED"})
             continue
 
         if dispatch_mode == "workflow_dispatch":

@@ -121,10 +121,7 @@ def main():
         )
 
         # 构建上下文（改为文件引用，避免超长 prompt）
-        context = (
-            f"**Issue 内容文件**: {issue_file}\n"
-            "请使用 Read 工具读取该文件后再进行分析。"
-        )
+        context = f"**Issue 内容文件**: {issue_file}\n" "请使用 Read 工具读取该文件后再进行分析。"
         comment_count = issue_info["comment_count"]
         comments = issue_info["comments"]
 
@@ -146,7 +143,9 @@ def main():
         print(f"[START] 执行 agents: {agents}")
 
         trigger_comment = os.environ.get("ISSUELAB_TRIGGER_COMMENT", "")
-        results = asyncio.run(run_agents_parallel(args.issue, agents, context, comment_count, trigger_comment=trigger_comment))
+        results = asyncio.run(
+            run_agents_parallel(args.issue, agents, context, comment_count, trigger_comment=trigger_comment)
+        )
 
         # 输出结果
         for agent_name, result in results.items():
@@ -169,7 +168,9 @@ def main():
         # 顺序执行：moderator -> reviewer_a -> reviewer_b -> summarizer
         agents = ["moderator", "reviewer_a", "reviewer_b", "summarizer"]
         trigger_comment = os.environ.get("ISSUELAB_TRIGGER_COMMENT", "")
-        results = asyncio.run(run_agents_parallel(args.issue, agents, context, comment_count, trigger_comment=trigger_comment))
+        results = asyncio.run(
+            run_agents_parallel(args.issue, agents, context, comment_count, trigger_comment=trigger_comment)
+        )
 
         for agent_name, result in results.items():
             response = result.get("response", str(result))
@@ -207,9 +208,7 @@ def main():
         )
         comments_ref = "历史评论已包含在同一文件中。" if issue_file else (comments or "无评论")
 
-        result = asyncio.run(
-            run_observer(args.issue, issue_info.get("title", ""), issue_body_ref, comments_ref)
-        )
+        result = asyncio.run(run_observer(args.issue, issue_info.get("title", ""), issue_body_ref, comments_ref))
 
         print(f"\n=== Observer Analysis for Issue #{args.issue} ===")
         print(f"\nAnalysis:\n{result.get('analysis', 'N/A')}")
@@ -419,7 +418,9 @@ def main():
         # 执行agent
         print(f"[START] 使用 {args.agent} 分析 {args.repo}#{args.issue}")
         trigger_comment = os.environ.get("ISSUELAB_TRIGGER_COMMENT", "")
-        results = asyncio.run(run_agents_parallel(args.issue, [args.agent], context, 0, available_agents, trigger_comment=trigger_comment))
+        results = asyncio.run(
+            run_agents_parallel(args.issue, [args.agent], context, 0, available_agents, trigger_comment=trigger_comment)
+        )
 
         if args.agent not in results:
             print(f"[ERROR] Agent {args.agent} 执行失败")
