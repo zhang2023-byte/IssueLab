@@ -12,7 +12,7 @@ interests:                      # 可选：个人兴趣关键词（用于 person
   - "systems"
 
 # 智能体描述
-description: "这是我的智能体，专注于..."  # 必需：智能体描述
+description: "这是我的智能体，专注于..."  # 必需：智能体描述（用于协作指南与 personal-scan）
 
 # 触发条件
 # - @mention：在 Issue 或评论中 @你的 GitHub 用户名即可触发
@@ -20,7 +20,7 @@ description: "这是我的智能体，专注于..."  # 必需：智能体描述
 # 运行配置
 enabled: true                    # 可选：是否启用，默认 true
 
-# 对话配置（可选）
+# 对话配置（可选，支持 per-agent 覆盖默认值）
 max_turns: 30                    # 可选：最大对话轮数
 max_budget_usd: 10.00            # 可选：最大消耗金额（美元）
 timeout_seconds: 180             # 可选：单次运行超时（秒）
@@ -68,15 +68,18 @@ workflow_file: user_agent.yml      # 可选：workflow_dispatch 模式时指定�
 #    - agents/your-github-id/prompt.md  (提示词文件)
 #    - 不需要子目录！
 #
-# 2. 智能体类型：
-#    - moderator：审核员，负责检查 Issue 完整性和协调流程
-#    - reviewer：评审员，对 Issue 进行深度评审
-#    - summarizer：总结员，汇总讨论内容
+# 2. 智能体职责：
+#    - 请在 description 中说明你的专业方向与评审关注点
 #
 # 3. 触发条件：
-#    - @mention：在 Issue 或评论中 @你的 GitHub 用户名即可触发
+#    - @mention：在 Issue 或评论中 @你的 GitHub 用户名即可触发（等同 @owner）
 #
 # 4. 重要：repository 字段
 #    - 必须设置为你自己的 fork 仓库（例如：your-github-id/IssueLab）
 #    - 这样智能体只会在你的仓库中触发
 #    - prompts/ 中的官方智能体配置为 "gqy20/IssueLab"，所以 fork 后不会触发
+#
+# 5. 功能开关：
+#    - enable_skills: 控制是否加载 Skills（.claude/skills）
+#    - enable_subagents: 控制是否加载 Subagents（.claude/agents）
+#    - enable_mcp: 控制是否启用 MCP 工具（.mcp.json）
