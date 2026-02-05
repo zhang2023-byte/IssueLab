@@ -75,6 +75,7 @@ IssueLab 是一个基于 GitHub Issues + Claude Agent SDK 的 **AI 科研协作�
 | `ANTHROPIC_MODEL` | ⚪ | 模型名称 | 可选，默认 MiniMax-M2.1 |
 | `GITHUB_APP_ID` | ✅ | GitHub App ID | GitHub App 设置页 |
 | `GITHUB_APP_PRIVATE_KEY` | ✅ | GitHub App 私钥 | GitHub App 设置页 |
+| `PAT_TOKEN` | ⚪ | 用于评论显示为用户身份 | GitHub Tokens 页面 |
 | `LOG_LEVEL` | ⚪ | 日志级别 | 可选，默认 INFO |
 
 **配置 GitHub App：**
@@ -83,6 +84,15 @@ IssueLab 是一个基于 GitHub Issues + Claude Agent SDK 的 **AI 科研协作�
 2. 点击 **Install**
 3. 选择你的 fork 仓库
 4. 在 App 设置页生成私钥，并将 `GITHUB_APP_ID` 与 `GITHUB_APP_PRIVATE_KEY` 添加到 Secrets
+
+**配置 PAT（可选，用于显示用户身份）：**
+
+1. 访问：https://github.com/settings/tokens/new
+2. 选择 **Tokens (classic)**
+3. 勾选权限：
+   - [x] `repo`
+   - [x] `workflow`
+4. 复制 token 并添加 `PAT_TOKEN` 到 Secrets
 
 ### 2.4 创建你的 Agent
 
@@ -604,8 +614,8 @@ ANTHROPIC_AUTH_TOKEN（不是 ANTHROPIC_API_KEY）
 **问题：评论没有触发其他 workflow**
 
 ```bash
-# 原因：未配置 GitHub App，无法跨仓库触发
-# 解决：安装 IssueLab GitHub App，并配置 GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY
+# 原因：未配置 GitHub App 或 PAT
+# 解决：安装 IssueLab GitHub App（用于触发），并配置 PAT_TOKEN（用于评论显示用户身份）
 ```
 
 **问题：找不到 workflow 文件**

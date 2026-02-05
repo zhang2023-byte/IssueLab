@@ -40,11 +40,15 @@ dispatch_mode: workflow_dispatch   # 可选：dispatch 方式
                                      #   - workflow_dispatch: 使用 workflow_dispatch 事件（推荐 fork 仓库）
 workflow_file: user_agent.yml      # 可选：workflow_dispatch 模式时指定的 workflow 文件
 
-# GitHub App 配置（重要：用于跨仓库触发）
+# GitHub App 配置（用于跨仓库触发）
 #
 # 在你的 fork 仓库中设置 secrets：
 # - GITHUB_APP_ID
 # - GITHUB_APP_PRIVATE_KEY
+#
+# PAT 配置（用于评论显示用户身份，可选）
+# - PAT_TOKEN
+# - 如未配置，评论将显示为 GitHub App/bot
 
 # 配置说明：
 #
