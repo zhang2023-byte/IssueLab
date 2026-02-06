@@ -17,7 +17,7 @@ from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
 
 from issuelab.agents.config import AgentConfig
 from issuelab.agents.discovery import AGENTS_DIR, discover_agents
-from issuelab.agents.registry import get_agent_config
+from issuelab.agents.registry import BUILTIN_AGENTS, get_agent_config
 from issuelab.config import Config
 from issuelab.logging_config import get_logger
 
@@ -34,6 +34,12 @@ _TOOL_AND_CITATION_RULES = (
     "Do not present uncertain claims as facts; explicitly mark uncertainty and what is missing. "
     "Output must include traceable source links (URLs) for factual statements so readers can verify them."
 )
+
+# 内置系统智能体默认运行上限（当未在 agents/<name>/agent.yml 显式配置时生效）
+_BUILTIN_DEFAULT_OVERRIDES: dict[str, float | int] = {
+    "max_turns": 100,
+    "timeout_seconds": 600,
+}
 
 
 def clear_agent_options_cache() -> None:
@@ -53,6 +59,8 @@ def _get_agent_run_overrides(agent_name: str | None) -> dict[str, float | int]:
 
     config = get_agent_config(agent_name, agents_dir=AGENTS_DIR, include_disabled=False)
     if not config:
+        if agent_name in BUILTIN_AGENTS:
+            return dict(_BUILTIN_DEFAULT_OVERRIDES)
         return {}
 
     overrides: dict[str, float | int] = {}

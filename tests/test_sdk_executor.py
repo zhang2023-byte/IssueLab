@@ -347,6 +347,15 @@ class TestCaching:
         assert not any(t.startswith("mcp__") for t in options.allowed_tools)
 
 
+def test_builtin_agents_use_higher_default_overrides():
+    """内置系统智能体在无 agent.yml 时应使用更高默认上限"""
+    from issuelab.agents import options as options_mod
+
+    options_mod.clear_agent_options_cache()
+    options = options_mod.create_agent_options(agent_name="moderator")
+    assert options.max_turns == 100
+
+
 class TestParseObserverResponse:
     """测试 Observer 响应解析"""
 
