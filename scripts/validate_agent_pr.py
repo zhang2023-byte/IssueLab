@@ -186,6 +186,11 @@ def main() -> int:
                 if filename == ".claude":
                     if not path.exists():
                         _error(errors, f"Missing agent .claude file: {file}")
+                elif filename == "skills":
+                    # Allow custom skill trees under agents/<name>/skills/**,
+                    # including nested scripts directories.
+                    if not path.exists():
+                        _error(errors, f"Missing agent skills file: {file}")
                 else:
                     _error(errors, f"Unsupported agent file: {file}")
 
