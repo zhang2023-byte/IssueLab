@@ -155,7 +155,7 @@ def discover_agents() -> dict[str, dict[str, Any]]:
 
     # 扫描 agents 目录下的用户自定义 agent
     if AGENTS_DIR.exists():
-        registry = load_registry(AGENTS_DIR, include_disabled=True)
+        registry = load_registry(AGENTS_DIR, include_disabled=False)
 
         for agent_name, agent_config in registry.items():
             agent_dir = AGENTS_DIR / agent_name
