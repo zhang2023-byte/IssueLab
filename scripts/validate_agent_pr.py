@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import urllib.request
 from pathlib import Path
 
 import yaml
@@ -63,10 +65,19 @@ def _validate_agent_yml(path: Path, folder: str, errors: list[str]) -> None:
         _error(errors, f"owner '{owner}' does not match folder name '{folder}' in {path}")
 
     repo = str(data.get("repository", "")).strip()
-    if owner and repo:
-        expected = f"{owner}/IssueLab"
-        if repo not in {expected, f"{expected}.git"}:
-            _error(errors, f"repository '{repo}' should be '{expected}' in {path}")
+    if repo.endswith(".git"):
+        repo = repo[:-4]
+    if repo:
+        if "/" not in repo:
+            _error(errors, f"repository '{repo}' must be in the form owner/name in {path}")
+        else:
+            repo_owner, repo_name = repo.split("/", 1)
+            if not repo_owner or not repo_name:
+                _error(errors, f"repository '{repo}' must be in the form owner/name in {path}")
+            elif repo_name != "IssueLab":
+                _error(errors, f"repository '{repo}' must point to an IssueLab fork in {path}")
+            else:
+                _check_repo_exists(repo, errors, path)
 
     if not content.endswith("\n"):
         _error(errors, f"File must end with newline: {path}")
@@ -105,6 +116,24 @@ def _validate_builtin_prompt(path: Path, errors: list[str]) -> None:
 
     if not content.endswith("\n"):
         _error(errors, f"File must end with newline: {path}")
+
+
+def _check_repo_exists(repo: str, errors: list[str], path: Path) -> None:
+    token = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+    if not token:
+        # No token available in local runs; skip existence check.
+        return
+
+    url = f"https://api.github.com/repos/{repo}"
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"token {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status != 200:
+                _error(errors, f"repository '{repo}' not found (HTTP {resp.status}) in {path}")
+    except Exception as exc:
+        _error(errors, f"repository '{repo}' lookup failed: {exc} in {path}")
 
 
 def main() -> int:
