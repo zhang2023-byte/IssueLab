@@ -49,6 +49,10 @@ jobs:
           echo "PR not eligible for auto-merge."
           exit 0
 
+      - name: "Validate Agent Files"
+        run: |
+          python scripts/validate_agent_pr.py --files '${{ steps.gate.outputs.file_list }}'
+
       - name: "Claude Review (Structured)"
         id: claude
         uses: anthropics/claude-code-action@v1
