@@ -32,7 +32,8 @@ jobs:
         with:
           python-version: '3.13'
           enable-cache: true
-      - run: uv sync
+          prune-cache: false
+      - run: uv sync --extra video
 
       - name: Update issue state
         run: |
@@ -411,7 +412,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev pkg-config
-          uv pip install manim==0.19.0
 
       - name: Run video_manim agent
         run: |
