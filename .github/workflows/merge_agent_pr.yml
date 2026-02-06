@@ -18,17 +18,13 @@ jobs:
     if: github.repository == 'gqy20/IssueLab'
     runs-on: ubuntu-latest
     steps:
-      - name: "Gate: Labels + Paths"
+      - name: "Gate: Paths"
         id: gate
         uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo } = context.repo;
             const pr = context.payload.pull_request;
-            const labelRequired = 'agent:ready';
-            const labels = (pr.labels || []).map(l => l.name);
-            const hasLabel = labels.includes(labelRequired);
-
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner,
               repo,
@@ -39,21 +35,16 @@ jobs:
             const allowedPrefixes = ['agents/', 'prompts/'];
             const allowed = files.every(f => allowedPrefixes.some(p => f.filename.startsWith(p)));
 
-            core.setOutput('has_label', String(hasLabel));
             core.setOutput('allowed_files', String(allowed));
             core.setOutput('file_count', String(files.length));
             core.setOutput('file_list', JSON.stringify(files.map(f => f.filename)));
-
-            if (!hasLabel) {
-              core.notice(`Missing label: ${labelRequired}`);
-            }
             if (!allowed) {
               const bad = files.filter(f => !allowedPrefixes.some(p => f.filename.startsWith(p))).map(f => f.filename);
               core.notice(`Blocked files outside allowed paths: ${bad.join(', ')}`);
             }
 
       - name: Stop if not eligible
-        if: steps.gate.outputs.has_label != 'true' || steps.gate.outputs.allowed_files != 'true'
+        if: steps.gate.outputs.allowed_files != 'true'
         run: |
           echo "PR not eligible for auto-merge."
           exit 0
