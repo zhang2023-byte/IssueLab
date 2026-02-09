@@ -171,9 +171,11 @@ def _render_markdown(raw_response: str, structured: dict[str, Any] | None) -> st
             lines.append("- （未提供）")
         lines.append("")
 
-    lines.append("### 原始输出")
-    lines.append(raw_response.strip() or "（空）")
-    lines.append("")
+    # 默认不回显完整原始 YAML，避免与结构化展示重复、拉长日报内容。
+    if not structured:
+        lines.append("### 诊断输出（原文）")
+        lines.append(raw_response.strip() or "（空）")
+        lines.append("")
     return "\n".join(lines)
 
 

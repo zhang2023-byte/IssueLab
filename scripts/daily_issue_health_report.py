@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 import subprocess
+import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -20,10 +21,18 @@ from typing import Any
 
 def _run_gh_json(args: list[str]) -> Any:
     cmd = ["gh", *args]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"gh command failed: {' '.join(cmd)}\n{proc.stderr}")
-    return json.loads(proc.stdout)
+    last_error = ""
+    for attempt in range(3):
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode == 0:
+            return json.loads(proc.stdout)
+        last_error = proc.stderr.strip()
+        # 对网络瞬断做轻量重试（如 EOF、TLS reset）
+        if attempt < 2 and re.search(r"EOF|timed out|connection|TLS|reset", last_error, re.IGNORECASE):
+            time.sleep(1.2 * (attempt + 1))
+            continue
+        break
+    raise RuntimeError(f"gh command failed: {' '.join(cmd)}\n{last_error}")
 
 
 def _iso_to_dt(value: str) -> datetime:
@@ -319,14 +328,22 @@ def render_markdown(repo: str, summary: DailySummary) -> str:
     lines.append("")
 
     lines.append("## 热点问答")
+    lines.append("<details>")
+    lines.append("<summary>展开查看热点问答（Top 5）</summary>")
+    lines.append("")
     if summary.top_issues:
         for issue_no, count, title in summary.top_issues:
             lines.append(f"- #{issue_no}（{count} 条新评论） {title}")
     else:
         lines.append("- 今日暂无活跃问答")
     lines.append("")
+    lines.append("</details>")
+    lines.append("")
 
     lines.append("## 待解决问题清单")
+    lines.append("<details>")
+    lines.append("<summary>展开查看待解决清单</summary>")
+    lines.append("")
     if summary.open_problem_issues:
         for issue_no, title, url in summary.open_problem_issues:
             lines.append(f"- [ ] #{issue_no} {title} ({url})")
@@ -335,6 +352,8 @@ def render_markdown(repo: str, summary: DailySummary) -> str:
     if summary.hot_open_issues:
         for issue_no, comments_count, title in summary.hot_open_issues:
             lines.append(f"- [ ] 关注高讨论量 Issue: #{issue_no}（{comments_count} 评论） {title}")
+    lines.append("")
+    lines.append("</details>")
     lines.append("")
 
     lines.append("---")
