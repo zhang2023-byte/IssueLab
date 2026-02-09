@@ -23,13 +23,14 @@ concurrency:
 permissions:
   issues: write
   contents: read
+  actions: write
 
 env:
   CATEGORIES: ${{ github.event.inputs.categories || 'cs.AI,cs.LG,cs.CL,cs.CV,cs.RO,cs.IR,cs.NE,stat.ML' }}
   MAX_RECOMMENDED: ${{ github.event.inputs.max_recommended || '2' }}
   # 获取更多论文供智能分析，分析后筛选创建 Issue
   FETCH_PAPERS: 20
-  GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+  GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
   # 启用 DEBUG 日志以显示 Agent 完整执行过程
   LOG_LEVEL: DEBUG
   MCP_LOG_DETAIL: "1"
@@ -55,11 +56,14 @@ jobs:
       - name: Get last scan time
         id: last_scan
         run: |
-          if [ -f .arxiv_last_scan ]; then
-            LAST_SCAN=$(cat .arxiv_last_scan)
+          LAST_SCAN=$(gh api -X GET "repos/${{ github.repository }}/actions/variables/ARXIV_LAST_SCAN" --jq '.value' 2>/dev/null || true)
+
+          if [ -n "$LAST_SCAN" ]; then
+            echo "Using persisted ARXIV_LAST_SCAN: $LAST_SCAN"
             echo "last_scan=$LAST_SCAN" >> $GITHUB_OUTPUT
           else
-            LAST_SCAN=$(date -d '7 days ago' --iso-8601=seconds)
+            LAST_SCAN=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+            echo "ARXIV_LAST_SCAN not found, fallback to: $LAST_SCAN"
             echo "last_scan=$LAST_SCAN" >> $GITHUB_OUTPUT
           fi
 
@@ -78,4 +82,17 @@ jobs:
             --last-scan "${{ steps.last_scan.outputs.last_scan }}"
 
       - name: Update last scan time
-        run: date --iso-8601=seconds > .arxiv_last_scan
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "Updating ARXIV_LAST_SCAN to: $NOW"
+
+          if gh api -X PATCH "repos/${{ github.repository }}/actions/variables/ARXIV_LAST_SCAN" \
+            -f name='ARXIV_LAST_SCAN' \
+            -f value="$NOW" >/dev/null 2>&1; then
+            echo "Updated existing ARXIV_LAST_SCAN"
+          else
+            gh api -X POST "repos/${{ github.repository }}/actions/variables" \
+              -f name='ARXIV_LAST_SCAN' \
+              -f value="$NOW" >/dev/null
+            echo "Created ARXIV_LAST_SCAN"
+          fi
