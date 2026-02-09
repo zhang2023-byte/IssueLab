@@ -163,6 +163,7 @@ jobs:
           # 清理临时文件
           rm -f "$ISSUE_BODY_FILE" "$COMMENT_BODY_FILE"
       - uses: actions/upload-artifact@v4
+        if: always() && hashFiles('logs/**') != ''
         with:
           name: dispatch-logs-${{ github.event.issue.number }}-${{ github.run_id }}
           path: logs/
@@ -310,7 +311,9 @@ jobs:
             )
 
           status = "success"
-          if failed_count > 0 and success_count > 0:
+          if matched_total == 0:
+            status = "skipped"
+          elif failed_count > 0 and success_count > 0:
             status = "partial"
           elif success_count == 0 and (failed_count > 0 or os.getenv("DISPATCH_OUTCOME") == "failure"):
             status = "failure"
