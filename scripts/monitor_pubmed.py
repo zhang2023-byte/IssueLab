@@ -674,7 +674,7 @@ def main(argv: list[str] | None = None) -> int:
         default='"Speciation"[Mesh] OR "Hybridization, Genetic"[Mesh] OR "Genetic Introgression"[Mesh] OR "Reproductive Isolation"[Mesh] OR "Gene Flow"[Mesh] OR (speciation[Title/Abstract] AND species[Title/Abstract]) OR ("lineage sorting"[Title/Abstract]) OR ("adaptive radiation"[Title/Abstract]) OR ("incipient species"[Title/Abstract])',
         help="PubMed 检索词",
     )
-    parser.add_argument("--days", type=int, default=1, help="追溯天数（默认: 1，即最近 1 天）")
+    parser.add_argument("--days", type=int, default=7, help="追溯天数（默认: 7，即最近 7 天）")
     parser.add_argument("--max-papers", type=int, default=10, help="获取文献数量（分析前，默认: 10）")
     parser.add_argument("--output", type=str, help="Output JSON file (optional)")
     parser.add_argument("--email", type=str, help="PubMed 联系邮箱（必填）")
