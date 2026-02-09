@@ -646,11 +646,11 @@ class TestStreamingOutput:
 
         from issuelab.agents.executor import run_single_agent
 
-        captured_timeout: dict[str, int] = {}
+        captured_timeouts: list[int] = []
 
         @contextmanager
         def fake_fail_after(seconds):
-            captured_timeout["value"] = int(seconds)
+            captured_timeouts.append(int(seconds))
             yield
 
         async def mock_query(*args, **kwargs):
@@ -667,7 +667,7 @@ class TestStreamingOutput:
         ):
             await run_single_agent("test prompt", "moderator")
 
-        assert captured_timeout["value"] == 600
+        assert 600 in captured_timeouts
 
     @pytest.mark.asyncio
     async def test_video_manim_timeout_uses_agent_override_900(self):
@@ -676,11 +676,11 @@ class TestStreamingOutput:
 
         from issuelab.agents.executor import run_single_agent
 
-        captured_timeout: dict[str, int] = {}
+        captured_timeouts: list[int] = []
 
         @contextmanager
         def fake_fail_after(seconds):
-            captured_timeout["value"] = int(seconds)
+            captured_timeouts.append(int(seconds))
             yield
 
         async def mock_query(*args, **kwargs):
@@ -697,4 +697,4 @@ class TestStreamingOutput:
         ):
             await run_single_agent("test prompt", "video_manim")
 
-        assert captured_timeout["value"] == 900
+        assert 900 in captured_timeouts

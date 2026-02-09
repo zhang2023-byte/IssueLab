@@ -11,7 +11,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -90,19 +90,22 @@ def _load_format_rules() -> dict[str, Any]:
     if _FORMAT_RULES_CACHE is not None:
         return _FORMAT_RULES_CACHE
 
-    rules = {**_DEFAULT_FORMAT_RULES}
+    rules = cast(dict[str, Any], {**_DEFAULT_FORMAT_RULES})
     config_path = Path(__file__).resolve().parents[2] / "config" / "response_format.yml"
     if config_path.exists():
         try:
             with config_path.open("r", encoding="utf-8") as handle:
                 data = yaml.safe_load(handle) or {}
             rules.update({k: v for k, v in data.items() if k in rules})
-            if "sections" in data:
-                rules["sections"].update(data.get("sections", {}))
-            if "limits" in data:
-                rules["limits"].update(data.get("limits", {}))
-            if "rules" in data:
-                rules["rules"].update(data.get("rules", {}))
+            sections = data.get("sections", {})
+            if isinstance(sections, dict):
+                cast(dict[str, Any], rules.get("sections", {})).update(sections)
+            limits = data.get("limits", {})
+            if isinstance(limits, dict):
+                cast(dict[str, Any], rules.get("limits", {})).update(limits)
+            rule_items = data.get("rules", {})
+            if isinstance(rule_items, dict):
+                cast(dict[str, Any], rules.get("rules", {})).update(rule_items)
         except Exception as exc:
             logger.warning("Failed to load response format rules: %s", exc)
 
@@ -303,31 +306,33 @@ def _normalize_agent_output(response_text: str, agent_name: str | None) -> tuple
     summary_line = clean_mentions_in_text(summary_line)
     summary_line = _truncate_text(summary_line, int(limits.get("summary_max_chars", 20)))
 
-    findings: list[str] = []
+    findings_items: list[str] = []
     for line in findings_block.splitlines():
         match = re.match(r"^\s*[-*]\s+(.*)", line)
         if match:
-            findings.append(match.group(1).strip())
-    if not findings:
+            findings_items.append(match.group(1).strip())
+    if not findings_items:
         warnings.append("Key Findings missing bullets")
     findings_count = int(limits.get("findings_count", 3))
-    findings = [
+    findings_items = [
         _truncate_text(clean_mentions_in_text(item), int(limits.get("findings_max_chars", 25)))
-        for item in findings[:findings_count]
+        for item in findings_items[:findings_count]
     ]
-    if len(findings) < findings_count:
+    if len(findings_items) < findings_count:
         warnings.append(f"Key Findings fewer than {findings_count} bullets")
 
-    actions: list[str] = []
+    actions_items: list[str] = []
     for line in actions_block.splitlines():
         match = re.match(r"^\s*[-*]\s+(.*)", line)
         if match:
-            actions.append(match.group(1).strip())
-    if not actions:
+            actions_items.append(match.group(1).strip())
+    if not actions_items:
         warnings.append("Recommended Actions missing bullets")
     actions_max = int(limits.get("actions_max_count", 2))
-    actions = [_truncate_text(item, int(limits.get("actions_max_chars", 30))) for item in actions[:actions_max]]
-    if len(actions) > actions_max:
+    actions_items = [
+        _truncate_text(item, int(limits.get("actions_max_chars", 30))) for item in actions_items[:actions_max]
+    ]
+    if len(actions_items) > actions_max:
         warnings.append(f"Recommended Actions truncated to {actions_max} bullets")
 
     confidence = "medium"
@@ -355,10 +360,10 @@ def _normalize_agent_output(response_text: str, agent_name: str | None) -> tuple
         f'summary: "{_yaml_escape(summary_line)}"',
         "findings:",
     ]
-    for item in findings:
+    for item in findings_items:
         yaml_lines.append(f'  - "{_yaml_escape(item)}"')
     yaml_lines.append("recommendations:")
-    for item in actions:
+    for item in actions_items:
         yaml_lines.append(f'  - "{_yaml_escape(item)}"')
     if parsed_mentions:
         mentions_max = int(limits.get("mentions_max_count", 5))
@@ -368,19 +373,19 @@ def _normalize_agent_output(response_text: str, agent_name: str | None) -> tuple
     yaml_lines.append(f'confidence: "{confidence}"')
     yaml_lines.append("```")
 
-    normalized: list[str] = []
+    normalized_lines: list[str] = []
     if agent_name:
-        normalized.extend([f"[Agent: {agent_name}]", ""])
-    normalized.extend(
+        normalized_lines.extend([f"[Agent: {agent_name}]", ""])
+    normalized_lines.extend(
         [
             summary_marker,
             summary_line or "(missing)",
             "",
             findings_marker,
-            *(f"- {item}" for item in findings),
+            *(f"- {item}" for item in findings_items),
             "",
             actions_marker,
-            *(f"- [ ] {item}" for item in actions),
+            *(f"- [ ] {item}" for item in actions_items),
             "",
             sources_marker,
             *(f"- {item}" for item in parsed_sources),
@@ -390,7 +395,7 @@ def _normalize_agent_output(response_text: str, agent_name: str | None) -> tuple
         ]
     )
 
-    return "\n".join(normalized).rstrip() + "\n", warnings
+    return "\n".join(normalized_lines).rstrip() + "\n", warnings
 
 
 def _extract_agent_name(response_text: str) -> str:

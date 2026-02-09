@@ -87,6 +87,49 @@ class TestMainTriggerComment:
 
             assert captured.get("trigger_comment") == "@agent please focus on this"
 
+    def test_execute_post_uses_guardrail_comment_for_failed_result(self, monkeypatch):
+        """execute --post 遇到失败结果应发布护栏评论而不是原始响应"""
+        from issuelab import __main__ as main_mod
+
+        monkeypatch.setattr(
+            main_mod, "get_issue_info", lambda *a, **k: {"title": "t", "body": "b", "comments": "", "comment_count": 0}
+        )
+        monkeypatch.setattr(main_mod, "parse_agents_arg", lambda s: ["gqy20"])
+
+        async def _fake_run(*args, **kwargs):
+            return {
+                "gqy20": {
+                    "ok": False,
+                    "error_type": "timeout",
+                    "error_message": "deadline exceeded",
+                    "failed_stage": "Researcher",
+                    "response": "[系统护栏] timeout",
+                    "cost_usd": 0.0,
+                    "num_turns": 0,
+                    "tool_calls": [],
+                }
+            }
+
+        posted = {}
+
+        def _fake_post(issue, body, agent_name=None, **kwargs):
+            posted["body"] = body
+            posted["agent_name"] = agent_name
+            return True
+
+        monkeypatch.setattr(main_mod, "run_agents_parallel", _fake_run)
+        monkeypatch.setattr(main_mod, "post_comment", _fake_post)
+
+        with (
+            patch("issuelab.tools.github.write_issue_context_file", lambda *a, **k: "/tmp/issue_1.md"),
+            patch("sys.argv", ["issuelab", "execute", "--issue", "1", "--agents", "gqy20", "--post"]),
+        ):
+            main_mod.main()
+
+        assert posted["agent_name"] == "gqy20"
+        assert "[系统护栏]" in posted["body"]
+        assert "failed_stage: Researcher" in posted["body"]
+
 
 class TestObserveBatchUsesGetIssueInfo:
     """确保 observe-batch 使用 get_issue_info 而不是直接调用 gh"""

@@ -53,6 +53,26 @@ class TestRetryAsync:
 
         assert call_count == 3  # 1 initial + 2 retries
 
+    @pytest.mark.asyncio
+    async def test_non_retryable_exception_fails_fast(self):
+        """不可重试异常应立即失败，不进入后续重试"""
+        call_count = 0
+
+        async def timeout_fail():
+            nonlocal call_count
+            call_count += 1
+            raise TimeoutError("timeout")
+
+        with pytest.raises(TimeoutError):
+            await retry_async(
+                timeout_fail,
+                max_retries=3,
+                initial_delay=0.1,
+                should_retry=lambda exc: not isinstance(exc, TimeoutError),
+            )
+
+        assert call_count == 1
+
 
 class TestRetrySync:
     """测试同步重试机制"""

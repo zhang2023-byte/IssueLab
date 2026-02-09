@@ -3,6 +3,7 @@
 处理 Agent 的执行、消息流和日志记录。
 """
 
+import asyncio
 import os
 import re
 import sys
@@ -43,6 +44,20 @@ _OUTPUT_SCHEMA_BLOCK = (
     "```\n"
 )
 
+_DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 90
+
+
+def _classify_run_exception(exc: Exception) -> str:
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    if isinstance(exc, asyncio.CancelledError):
+        return "timeout"
+    return "unknown"
+
+
+def _should_retry_run_exception(exc: Exception) -> bool:
+    return not isinstance(exc, TimeoutError | asyncio.CancelledError)
+
 
 def _append_output_schema(prompt: str) -> str:
     """为 prompt 注入统一输出格式（如果尚未注入）。"""
@@ -51,7 +66,7 @@ def _append_output_schema(prompt: str) -> str:
     return f"{prompt}{_OUTPUT_SCHEMA_BLOCK}"
 
 
-async def run_single_agent(prompt: str, agent_name: str) -> dict:
+async def run_single_agent(prompt: str, agent_name: str, *, stage_name: str | None = None) -> dict:
     """运行单个代理（带完善的中间日志监听）
 
     Args:
@@ -72,6 +87,10 @@ async def run_single_agent(prompt: str, agent_name: str) -> dict:
 
     # 执行信息收集
     execution_info: dict[str, Any] = {
+        "ok": True,
+        "error_type": None,
+        "error_message": None,
+        "stage": stage_name,
         "response": "",
         "cost_usd": 0.0,
         "num_turns": 0,
@@ -208,18 +227,57 @@ async def run_single_agent(prompt: str, agent_name: str) -> dict:
             return _BUILTIN_EXECUTION_TIMEOUT_SECONDS
         return AgentConfig().timeout_seconds
 
+    def _get_attempt_timeout_seconds(overall_timeout_seconds: int | None) -> int | None:
+        config = None
+        try:
+            from issuelab.agents.registry import get_agent_config
+
+            config = get_agent_config(agent_name)
+        except Exception:
+            config = None
+
+        if config and "attempt_timeout_seconds" in config:
+            try:
+                value = int(config["attempt_timeout_seconds"])
+                return value if value > 0 else None
+            except (TypeError, ValueError):
+                return None
+        if not overall_timeout_seconds:
+            return None
+        return max(1, min(_DEFAULT_ATTEMPT_TIMEOUT_SECONDS, int(overall_timeout_seconds)))
+
     try:
         timeout_seconds = _get_timeout_seconds()
+        attempt_timeout_seconds = _get_attempt_timeout_seconds(timeout_seconds)
+
+        async def _query_agent_with_attempt_timeout() -> str:
+            if attempt_timeout_seconds:
+                with anyio.fail_after(attempt_timeout_seconds):
+                    return await _query_agent()
+            return await _query_agent()
+
         if timeout_seconds:
             with anyio.fail_after(timeout_seconds):
                 response = cast(
                     str,
-                    await retry_async(_query_agent, max_retries=3, initial_delay=2.0, backoff_factor=2.0),
+                    await retry_async(
+                        _query_agent_with_attempt_timeout,
+                        max_retries=3,
+                        initial_delay=2.0,
+                        backoff_factor=2.0,
+                        should_retry=_should_retry_run_exception,
+                    ),
                 )
         else:
             response = cast(
                 str,
-                await retry_async(_query_agent, max_retries=3, initial_delay=2.0, backoff_factor=2.0),
+                await retry_async(
+                    _query_agent_with_attempt_timeout,
+                    max_retries=3,
+                    initial_delay=2.0,
+                    backoff_factor=2.0,
+                    should_retry=_should_retry_run_exception,
+                ),
             )
         execution_info["response"] = response
 
@@ -237,9 +295,14 @@ async def run_single_agent(prompt: str, agent_name: str) -> dict:
 
         return execution_info
     except Exception as e:
+        error_type = _classify_run_exception(e)
         logger.error(f"[{agent_name}] 运行失败: {e}", exc_info=True)
         return {
-            "response": f"[错误] Agent {agent_name} 执行失败: {e}",
+            "ok": False,
+            "error_type": error_type,
+            "error_message": str(e),
+            "stage": stage_name,
+            "response": f"[系统护栏] Agent {agent_name} 执行失败（{error_type}）: {e}",
             "cost_usd": 0.0,
             "num_turns": 0,
             "tool_calls": [],
@@ -306,6 +369,34 @@ def _extract_sources_from_yaml(text: str) -> list[str]:
     return deduped
 
 
+def _validate_researcher_stage_output(text: str) -> tuple[bool, str]:
+    yaml_text = _extract_yaml_block(text)
+    if not yaml_text:
+        return False, "缺少 YAML 输出块"
+
+    try:
+        parsed = yaml.safe_load(yaml_text)
+    except Exception as exc:
+        return False, f"YAML 解析失败: {exc}"
+
+    if not isinstance(parsed, dict):
+        return False, "YAML 根节点必须为对象"
+
+    evidence = parsed.get("evidence")
+    if not isinstance(evidence, list) or len(evidence) == 0:
+        return False, "Researcher 输出缺少 evidence 列表"
+
+    has_url = False
+    for item in evidence:
+        if isinstance(item, dict) and str(item.get("url", "")).startswith(("http://", "https://")):
+            has_url = True
+            break
+    if not has_url:
+        return False, "Researcher evidence 中缺少可追溯 URL"
+
+    return True, ""
+
+
 def _collect_source_urls(text: str) -> list[str]:
     """优先从 YAML sources 收集，否则回退为全文 URL。"""
     from_yaml = _extract_sources_from_yaml(text)
@@ -330,7 +421,33 @@ async def _run_gqy20_multistage(agent_prompt: str, issue_number: int, task_conte
     total_tokens = 0
     tool_calls: list[str] = []
 
-    async def _run_stage(stage_name: str, task: str) -> str:
+    def _build_failure_result(stage_name: str, error_type: str, error_message: str) -> dict[str, Any]:
+        unique_tools: list[str] = []
+        for tool in tool_calls:
+            if tool not in unique_tools:
+                unique_tools.append(tool)
+        return {
+            "ok": False,
+            "error_type": error_type,
+            "error_message": error_message,
+            "failed_stage": stage_name,
+            "response": (
+                f"[Agent: gqy20]\n"
+                f"[系统护栏] 多阶段流程在 {stage_name} 阶段中断。\n"
+                f"- error_type: {error_type}\n"
+                f"- error_message: {error_message}\n"
+                "- 建议：重试任务，或先排查工具可用性后再运行。"
+            ),
+            "cost_usd": total_cost,
+            "num_turns": total_turns,
+            "tool_calls": unique_tools,
+            "input_tokens": total_input_tokens,
+            "output_tokens": total_output_tokens,
+            "total_tokens": total_tokens,
+            "stages": stages,
+        }
+
+    async def _run_stage(stage_name: str, task: str) -> dict[str, Any]:
         nonlocal total_cost, total_turns, total_input_tokens, total_output_tokens, total_tokens
         stage_prompt = f"""{agent_prompt}
 
@@ -348,7 +465,7 @@ async def _run_gqy20_multistage(agent_prompt: str, issue_number: int, task_conte
 ## 当前任务
 {task}
 """
-        result = await run_single_agent(stage_prompt, "gqy20")
+        result = await run_single_agent(stage_prompt, "gqy20", stage_name=stage_name)
         total_cost += float(result.get("cost_usd", 0.0))
         total_turns += int(result.get("num_turns", 0))
         total_input_tokens += int(result.get("input_tokens", 0))
@@ -359,7 +476,28 @@ async def _run_gqy20_multistage(agent_prompt: str, issue_number: int, task_conte
             tool_calls.extend(str(t) for t in stage_tools)
         text = str(result.get("response", "")).strip()
         stages[stage_name] = text
-        return text
+        if not bool(result.get("ok", True)):
+            return {
+                "ok": False,
+                "error_type": str(result.get("error_type") or "unknown"),
+                "error_message": str(result.get("error_message") or f"{stage_name} 执行失败"),
+                "response": text,
+            }
+        if stage_name == "Researcher":
+            valid, message = _validate_researcher_stage_output(text)
+            if not valid:
+                return {
+                    "ok": False,
+                    "error_type": "invalid_output",
+                    "error_message": message,
+                    "response": text,
+                }
+        return {
+            "ok": True,
+            "error_type": None,
+            "error_message": None,
+            "response": text,
+        }
 
     researcher_task = f"""
 请先只做“证据收集”，不要下最终结论。
@@ -380,7 +518,14 @@ open_questions:
 confidence: "low|medium|high"
 ```
 """
-    research_text = await _run_stage("Researcher", researcher_task)
+    research_stage = await _run_stage("Researcher", researcher_task)
+    if not research_stage["ok"]:
+        return _build_failure_result(
+            "Researcher",
+            str(research_stage.get("error_type") or "unknown"),
+            str(research_stage.get("error_message") or "Researcher 阶段失败"),
+        )
+    research_text = str(research_stage.get("response", ""))
 
     analyst_task = f"""
 基于 Researcher 证据，产出 2-3 个候选结论版本（不要最终定稿）。
@@ -411,7 +556,14 @@ candidates:
 confidence: "low|medium|high"
 ```
 """
-    analyst_text = await _run_stage("Analyst", analyst_task)
+    analyst_stage = await _run_stage("Analyst", analyst_task)
+    if not analyst_stage["ok"]:
+        return _build_failure_result(
+            "Analyst",
+            str(analyst_stage.get("error_type") or "unknown"),
+            str(analyst_stage.get("error_message") or "Analyst 阶段失败"),
+        )
+    analyst_text = str(analyst_stage.get("response", ""))
 
     critic_task = f"""
 逐条批判 Analyst 候选结论，识别逻辑漏洞、证据缺口、过度推断和缺失引用。
@@ -434,7 +586,14 @@ criticisms:
 confidence: "low|medium|high"
 ```
 """
-    critic_text = await _run_stage("Critic", critic_task)
+    critic_stage = await _run_stage("Critic", critic_task)
+    if not critic_stage["ok"]:
+        return _build_failure_result(
+            "Critic",
+            str(critic_stage.get("error_type") or "unknown"),
+            str(critic_stage.get("error_message") or "Critic 阶段失败"),
+        )
+    critic_text = str(critic_stage.get("response", ""))
 
     verifier_task = f"""
 强制核验候选结论的来源链接与证据一致性。
@@ -462,7 +621,14 @@ verification_gaps:
 confidence: "low|medium|high"
 ```
 """
-    verifier_text = await _run_stage("Verifier", verifier_task)
+    verifier_stage = await _run_stage("Verifier", verifier_task)
+    if not verifier_stage["ok"]:
+        return _build_failure_result(
+            "Verifier",
+            str(verifier_stage.get("error_type") or "unknown"),
+            str(verifier_stage.get("error_message") or "Verifier 阶段失败"),
+        )
+    verifier_text = str(verifier_stage.get("response", ""))
 
     judge_base_task = f"""
 请综合 Researcher/Analyst/Critic/Verifier 结果，给出最终结论。
@@ -506,7 +672,14 @@ confidence: "low|medium|high"
         judge_task = judge_base_task
         if retry_feedback:
             judge_task += f"\n\n补充要求（第 {attempt + 1} 次尝试）：\n{retry_feedback}\n"
-        judge_text = await _run_stage("Judge", judge_task)
+        judge_stage = await _run_stage("Judge", judge_task)
+        if not judge_stage["ok"]:
+            return _build_failure_result(
+                "Judge",
+                str(judge_stage.get("error_type") or "unknown"),
+                str(judge_stage.get("error_message") or "Judge 阶段失败"),
+            )
+        judge_text = str(judge_stage.get("response", ""))
         source_urls = _collect_source_urls(judge_text)
         if source_urls:
             break
@@ -550,6 +723,9 @@ confidence: "low|medium|high"
             unique_tools.append(tool)
 
     return {
+        "ok": True,
+        "error_type": None,
+        "error_message": None,
         "response": judge_text,
         "cost_usd": total_cost,
         "num_turns": total_turns,

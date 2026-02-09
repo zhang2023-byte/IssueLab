@@ -51,6 +51,32 @@ def parse_agents_arg(agents_str: str) -> list[str]:
     return [a.lower() for a in agents_str.split() if a]
 
 
+def _is_result_publishable(result: dict) -> tuple[bool, str]:
+    if not bool(result.get("ok", True)):
+        error_type = str(result.get("error_type") or "unknown")
+        error_message = str(result.get("error_message") or "execution failed")
+        return False, f"error_type={error_type}, error={error_message}"
+
+    response = str(result.get("response") or "")
+    if response.startswith("[错误]") or response.startswith("[系统护栏]"):
+        return False, "response is an internal error payload"
+    return True, ""
+
+
+def _build_failure_comment(agent_name: str, result: dict) -> str:
+    failed_stage = str(result.get("failed_stage") or result.get("stage") or "unknown")
+    error_type = str(result.get("error_type") or "unknown")
+    error_message = str(result.get("error_message") or "execution failed")
+    return (
+        f"[Agent: {agent_name}]\n"
+        "[系统护栏] 本次自动评审未产出可发布结论。\n"
+        f"- failed_stage: {failed_stage}\n"
+        f"- error_type: {error_type}\n"
+        f"- error_message: {error_message}\n"
+        "- 建议：修复工具/网络可用性后重试，避免基于不完整证据发布结论。"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Issue Lab Agent")
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
@@ -160,8 +186,12 @@ def main():
 
             # 如果需要，自动发布到 Issue（auto_clean 会自动处理 @mentions）
             if getattr(args, "post", False):
-                if post_comment(args.issue, response, agent_name=agent_name):
+                publishable, reason = _is_result_publishable(result)
+                body_to_post = response if publishable else _build_failure_comment(agent_name, result)
+                if post_comment(args.issue, body_to_post, agent_name=agent_name):
                     print(f"[OK] {agent_name} response posted to issue #{args.issue}")
+                    if not publishable:
+                        print(f"[WARN] {agent_name} result blocked by guardrail: {reason}")
                 else:
                     print(f"[ERROR] Failed to post {agent_name} response")
 
@@ -184,8 +214,12 @@ def main():
 
             # 如果需要，自动发布到 Issue（auto_clean 会自动处理 @mentions）
             if getattr(args, "post", False):
-                if post_comment(args.issue, response, agent_name=agent_name):
+                publishable, reason = _is_result_publishable(result)
+                body_to_post = response if publishable else _build_failure_comment(agent_name, result)
+                if post_comment(args.issue, body_to_post, agent_name=agent_name):
                     print(f"[OK] {agent_name} response posted to issue #{args.issue}")
+                    if not publishable:
+                        print(f"[WARN] {agent_name} result blocked by guardrail: {reason}")
                 else:
                     print(f"[ERROR] Failed to post {agent_name} response")
 

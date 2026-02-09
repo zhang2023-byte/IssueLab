@@ -165,7 +165,9 @@ def discover_agents() -> dict[str, dict[str, Any]]:
             clean_content = re.sub(r"^---\n.*?\n---\n", "", prompt_content, flags=re.DOTALL).strip()
 
             description = agents.get(builtin_name, {}).get("description", "")
-            trigger_conditions: list[str] = agents.get(builtin_name, {}).get("trigger_conditions", [])
+            trigger_conditions = agents.get(builtin_name, {}).get("trigger_conditions", [])
+            if not isinstance(trigger_conditions, list):
+                trigger_conditions = []
             if metadata:
                 meta_desc = metadata.get("description", "")
                 if isinstance(meta_desc, str) and meta_desc:
