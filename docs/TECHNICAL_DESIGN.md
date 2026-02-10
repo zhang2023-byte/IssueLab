@@ -148,6 +148,12 @@ triggers:
   - "@alice"
   - "@alice-bot"
 
+# 能力开关（可选）
+enable_skills: true
+enable_subagents: true
+enable_mcp: true
+enable_system_mcp: false
+
 enabled: true
 ```
 

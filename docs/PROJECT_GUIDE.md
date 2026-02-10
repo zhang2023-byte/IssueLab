@@ -119,6 +119,12 @@ interests:
   - machine learning
   - computer vision
   - transformers
+
+# 功能开关（建议显式配置）
+enable_skills: true
+enable_subagents: true
+enable_mcp: true
+enable_system_mcp: false
 ```
 
 编辑 `agents/YOUR_USERNAME/prompt.md` 定义 agent 的行为风格。

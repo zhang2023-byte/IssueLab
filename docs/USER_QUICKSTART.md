@@ -67,6 +67,12 @@ repository: your_username/IssueLab
 enabled: true
 max_turns: 30
 max_budget_usd: 10.0
+
+# 建议显式声明能力开关
+enable_skills: true
+enable_subagents: true
+enable_mcp: true
+enable_system_mcp: false
 ```
 
 ---

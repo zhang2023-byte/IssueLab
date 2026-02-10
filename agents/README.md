@@ -63,7 +63,7 @@ your-github-id/
                         # - 放置 SKILL.md（技能）
 
 └── .claude/agents/      # Subagents（可选）
-                        # - 放置 subagent markdown（含 frontmatter，可在 agent.yml 中关闭）
+                        # - 放置 subagent markdown（可在 agent.yml 中关闭）
 ```
 
 **关键点：**
@@ -390,41 +390,25 @@ branch: "main"                  # 可选：分支名（默认 main）
 
 ## 🛠️ 高级功能
 
-### 标签过滤
+### 能力开关（推荐显式配置）
 
-只响应特定标签的 Issue：
-
-```yaml
-agents:
-  - id: cv-expert
-    name: "CV 专家"
-    labels_filter:
-      - "domain:computer-vision"
-      - "domain:cv"
-```
-
-### 自动触发
-
-Issue 创建时自动运行：
+当前稳定支持的能力开关如下（均在 `agent.yml` 顶层）：
 
 ```yaml
-agents:
-  - id: moderator
-    name: "审核员"
-    auto_trigger: true
+enable_skills: true
+enable_subagents: true
+enable_mcp: true
+enable_system_mcp: false
 ```
 
-### 优先级控制
+- `enable_skills`：是否加载 `agents/<id>/.claude/skills/`
+- `enable_subagents`：是否加载 `agents/<id>/.claude/agents/`
+- `enable_mcp`：是否加载 `agents/<id>/.mcp.json`
+- `enable_system_mcp`：是否额外加载项目根目录 `/.mcp.json`
 
-数字越大优先级越高（0-10）：
-
-```yaml
-agents:
-  - id: moderator
-    priority: 10  # 最先运行
-  - id: reviewer
-    priority: 5   # 之后运行
-```
+说明：
+- 用户智能体默认倾向于启用能力；系统智能体建议显式关闭后按需开启。
+- 如需最小化风险，请优先把四个开关都显式写入 `agent.yml`。
 
 ## 📚 参考资源
 
