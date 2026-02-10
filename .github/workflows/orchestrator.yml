@@ -92,37 +92,58 @@ jobs:
       has_builtin: ${{ steps.detect.outputs.has_builtin }}
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Detect built-in agents
         id: detect
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          COMMENT="$COMMENT_BODY"
+          FOUND_AGENTS=$(python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
 
-          # 定义内置 Agent 映射（只使用真名）
-          declare -A AGENT_MAP=(
-            ["moderator"]="moderator"
-            ["reviewer_a"]="reviewer_a"
-            ["reviewer_b"]="reviewer_b"
-            ["summarizer"]="summarizer"
-            ["observer"]="observer"
-            ["pubmed_observer"]="pubmed_observer"
-            ["arxiv_observer"]="arxiv_observer"
-            ["video_manim"]="video_manim"
+          comment = os.environ.get("COMMENT_BODY", "")
+          agents_dir = Path("agents")
+
+          system_agents: set[str] = set()
+          if agents_dir.exists():
+            for agent_file in sorted(agents_dir.glob("*/agent.yml")):
+              try:
+                text = agent_file.read_text(encoding="utf-8")
+              except OSError:
+                continue
+
+              if re.search(r"^\s*enabled:\s*false\s*$", text, re.IGNORECASE | re.MULTILINE):
+                continue
+
+              type_match = re.search(
+                r"^\s*agent_type:\s*['\"]?([a-zA-Z_]+)['\"]?\s*$",
+                text,
+                re.IGNORECASE | re.MULTILINE,
+              )
+              if not type_match or type_match.group(1).strip().lower() != "system":
+                continue
+
+              owner_match = re.search(
+                r"^\s*(?:owner|username):\s*['\"]?([a-zA-Z0-9_.-]+)['\"]?\s*$",
+                text,
+                re.IGNORECASE | re.MULTILINE,
+              )
+              if not owner_match:
+                continue
+              system_agents.add(owner_match.group(1).strip().lower())
+
+          found: list[str] = []
+          for mention in re.findall(r"@([a-zA-Z0-9_-]+)", comment):
+            candidate = mention.lower()
+            if candidate in system_agents and candidate not in found:
+              found.append(candidate)
+
+          print(",".join(found), end="")
+          PY
           )
-
-          # 查找匹配的内置 Agent（不区分大小写）
-          FOUND_AGENTS=""
-          for alias in "${!AGENT_MAP[@]}"; do
-            if echo "$COMMENT" | grep -qi "@${alias}"; then
-              AGENT="${AGENT_MAP[$alias]}"
-              if [ -z "$FOUND_AGENTS" ]; then
-                FOUND_AGENTS="$AGENT"
-              elif [[ ",$FOUND_AGENTS," != *",$AGENT,"* ]]; then
-                FOUND_AGENTS="$FOUND_AGENTS,$AGENT"
-              fi
-            fi
-          done
 
           if [ -n "$FOUND_AGENTS" ]; then
             echo "has_builtin=true" >> $GITHUB_OUTPUT
