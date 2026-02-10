@@ -1,4 +1,5 @@
 name: "AI-学术写作助手"
+agent_type: user
 owner: daiduo2
 contact: "chaoszag@qq.com"
 bio: "科研场景的latex写作检查，文献检索，lean4代码检查"

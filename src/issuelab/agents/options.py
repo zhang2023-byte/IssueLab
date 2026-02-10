@@ -36,7 +36,7 @@ _TOOL_AND_CITATION_RULES = (
 )
 
 # 内置系统智能体默认运行上限（当未在 agents/<name>/agent.yml 显式配置时生效）
-_BUILTIN_DEFAULT_OVERRIDES: dict[str, float | int] = {
+_SYSTEM_DEFAULT_OVERRIDES: dict[str, float | int] = {
     "max_turns": 100,
     "timeout_seconds": 600,
 }
@@ -54,7 +54,7 @@ def _default_feature_flags(agent_name: str | None) -> dict[str, bool]:
     """Resolve default feature flags from environment.
 
     Defaults:
-    - built-in/system agents: disabled
+    - system agents: disabled
     - personal agents: enabled
 
     Set ISSUELAB_ENABLE_DEFAULT_FEATURES=1 to enable globally.
@@ -63,8 +63,8 @@ def _default_feature_flags(agent_name: str | None) -> dict[str, bool]:
     - ISSUELAB_DEFAULT_ENABLE_SUBAGENTS
     - ISSUELAB_DEFAULT_ENABLE_MCP
     """
-    is_builtin = bool(agent_name and is_system_agent(agent_name, agents_dir=AGENTS_DIR)[0])
-    global_default = _env_flag("ISSUELAB_ENABLE_DEFAULT_FEATURES", not is_builtin)
+    is_system = bool(agent_name and is_system_agent(agent_name, agents_dir=AGENTS_DIR)[0])
+    global_default = _env_flag("ISSUELAB_ENABLE_DEFAULT_FEATURES", not is_system)
     return {
         "enable_skills": _env_flag("ISSUELAB_DEFAULT_ENABLE_SKILLS", global_default),
         "enable_subagents": _env_flag("ISSUELAB_DEFAULT_ENABLE_SUBAGENTS", global_default),
@@ -90,7 +90,7 @@ def _get_agent_run_overrides(agent_name: str | None) -> dict[str, float | int]:
     config = get_agent_config(agent_name, agents_dir=AGENTS_DIR, include_disabled=False)
     if not config:
         if is_system_agent(agent_name, agents_dir=AGENTS_DIR)[0]:
-            return dict(_BUILTIN_DEFAULT_OVERRIDES)
+            return dict(_SYSTEM_DEFAULT_OVERRIDES)
         return {}
 
     overrides: dict[str, float | int] = {}

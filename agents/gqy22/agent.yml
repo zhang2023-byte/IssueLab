@@ -2,6 +2,7 @@
 
 # 智能体信息
 name: "gqy22 的研究助手"
+agent_type: user
 owner: gqy22
 contact: "vietchuongdhv@vinhuni.edu.vn"
 bio: "智能体开发专家，精通 Claude Agent SDK、LangChain、AutoGen、Agno 等多种 Agent 框架，专注于 LLM 应用架构设计"  # 请修改为你的真实背景

@@ -383,7 +383,7 @@ class TestCaching:
         assert not any(t.startswith("mcp__") for t in options.allowed_tools)
 
     def test_feature_flags_default_disabled(self, monkeypatch):
-        """内置系统智能体默认应关闭可选能力。"""
+        """系统智能体默认应关闭可选能力。"""
         from issuelab.agents import options as options_mod
 
         monkeypatch.delenv("ISSUELAB_ENABLE_DEFAULT_FEATURES", raising=False)
@@ -434,8 +434,8 @@ class TestCaching:
         }
 
 
-def test_builtin_agents_use_higher_default_overrides():
-    """内置系统智能体在无 agent.yml 时应使用更高默认上限"""
+def test_system_agents_use_higher_default_overrides():
+    """系统智能体在无 agent.yml 时应使用更高默认上限"""
     from issuelab.agents import options as options_mod
 
     options_mod.clear_agent_options_cache()
@@ -698,7 +698,7 @@ class TestStreamingOutput:
         assert "## Output Format (required)" in captured["prompt"]
 
     @pytest.mark.asyncio
-    async def test_builtin_agent_timeout_defaults_to_600(self):
+    async def test_system_agent_timeout_defaults_to_600(self):
         """system agent 在无显式配置时应使用 600s 超时"""
         from claude_agent_sdk import ResultMessage
 

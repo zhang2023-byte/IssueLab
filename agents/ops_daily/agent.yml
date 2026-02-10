@@ -1,6 +1,7 @@
 # IssueLab 系统智能体配置 - ops_daily
 
 name: "ops_daily - 系统稳定性分析官"
+agent_type: system
 owner: ops_daily
 contact: "noreply@issuelab.local"
 bio: "系统级日报智能体，负责基于证据包分析稳定性、风险与待办"

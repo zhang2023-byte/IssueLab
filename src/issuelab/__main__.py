@@ -115,7 +115,9 @@ def main():
         help="Observer 并行分析上限（默认 5，可用 ISSUELAB_OBSERVER_MAX_PARALLEL 覆盖）",
     )
     observe_batch_parser.add_argument(
-        "--auto-trigger", action="store_true", help="自动触发 agent（内置agent用label，用户agent用dispatch）"
+        "--auto-trigger",
+        action="store_true",
+        help="自动触发 agent（system 走 workflow dispatch，user 走 repository dispatch）",
     )
 
     # 列出所有可用 Agent

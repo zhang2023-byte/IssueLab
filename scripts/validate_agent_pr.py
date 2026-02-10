@@ -34,13 +34,13 @@ def _validate_agent_yml(path: Path, folder: str, errors: list[str]) -> None:
         _error(errors, f"YAML root must be a mapping in {path}")
         return
 
-    required = ["name", "owner", "description", "repository"]
+    required = ["name", "owner", "description", "repository", "agent_type"]
     for key in required:
         if not data.get(key):
             _error(errors, f"Missing required field '{key}' in {path}")
 
     agent_type = data.get("agent_type")
-    if agent_type is not None and str(agent_type).strip().lower() not in {"system", "user"}:
+    if str(agent_type).strip().lower() not in {"system", "user"}:
         _error(errors, f"Invalid 'agent_type' in {path}: must be 'system' or 'user'")
 
     owner = str(data.get("owner", "")).strip()

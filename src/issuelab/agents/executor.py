@@ -29,7 +29,7 @@ from issuelab.retry import retry_async
 
 logger = get_logger(__name__)
 
-_BUILTIN_EXECUTION_TIMEOUT_SECONDS = 600
+_SYSTEM_EXECUTION_TIMEOUT_SECONDS = 600
 
 _OUTPUT_SCHEMA_BLOCK = (
     "\n\n## Output Format (required)\n"
@@ -224,7 +224,7 @@ async def run_single_agent(prompt: str, agent_name: str, *, stage_name: str | No
             except (TypeError, ValueError):
                 return None
         if is_system_agent(agent_name)[0]:
-            return _BUILTIN_EXECUTION_TIMEOUT_SECONDS
+            return _SYSTEM_EXECUTION_TIMEOUT_SECONDS
         return AgentConfig().timeout_seconds
 
     def _get_attempt_timeout_seconds(overall_timeout_seconds: int | None) -> int | None:

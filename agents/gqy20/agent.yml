@@ -2,6 +2,7 @@
 
 # 智能体信息
 name: "gqy20 - AI 应用开发者"
+agent_type: user
 owner: gqy20
 contact: "your-email@example.com"
 bio: "AI 应用开发者，专注于科研场景的 AI Agent 系统设计，熟悉 Claude Agent SDK、FastMCP 等框架"

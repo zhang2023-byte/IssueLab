@@ -89,12 +89,12 @@ jobs:
 
     outputs:
       agents: ${{ steps.detect.outputs.agents }}
-      has_builtin: ${{ steps.detect.outputs.has_builtin }}
+      has_system: ${{ steps.detect.outputs.has_system }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Detect built-in agents
+      - name: Detect system agents
         id: detect
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
@@ -146,18 +146,18 @@ jobs:
           )
 
           if [ -n "$FOUND_AGENTS" ]; then
-            echo "has_builtin=true" >> $GITHUB_OUTPUT
+            echo "has_system=true" >> $GITHUB_OUTPUT
             echo "agents=$FOUND_AGENTS" >> $GITHUB_OUTPUT
-            echo "Found built-in agents: $FOUND_AGENTS"
+            echo "Found system agents: $FOUND_AGENTS"
           else
-            echo "has_builtin=false" >> $GITHUB_OUTPUT
-            echo "No built-in agents found"
+            echo "has_system=false" >> $GITHUB_OUTPUT
+            echo "No system agents found"
           fi
 
-  # ========== 运行内置 Agent（并行 Job） ==========
+  # ========== 运行系统 Agent（并行 Job） ==========
   run-moderator:
     needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'moderator')
+    if: needs.detect-mentions.outputs.has_system == 'true' && contains(needs.detect-mentions.outputs.agents, 'moderator')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -184,7 +184,7 @@ jobs:
 
   run-reviewer_a:
     needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'reviewer_a')
+    if: needs.detect-mentions.outputs.has_system == 'true' && contains(needs.detect-mentions.outputs.agents, 'reviewer_a')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -211,7 +211,7 @@ jobs:
 
   run-reviewer_b:
     needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'reviewer_b')
+    if: needs.detect-mentions.outputs.has_system == 'true' && contains(needs.detect-mentions.outputs.agents, 'reviewer_b')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -238,7 +238,7 @@ jobs:
 
   run-summarizer:
     needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'summarizer')
+    if: needs.detect-mentions.outputs.has_system == 'true' && contains(needs.detect-mentions.outputs.agents, 'summarizer')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -280,7 +280,7 @@ jobs:
 
   run-pubmed-observer:
     needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'pubmed_observer')
+    if: needs.detect-mentions.outputs.has_system == 'true' && contains(needs.detect-mentions.outputs.agents, 'pubmed_observer')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -307,7 +307,7 @@ jobs:
 
   run-arxiv-observer:
     needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'arxiv_observer')
+    if: needs.detect-mentions.outputs.has_system == 'true' && contains(needs.detect-mentions.outputs.agents, 'arxiv_observer')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -334,7 +334,7 @@ jobs:
 
   run-observer:
     needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'observer')
+    if: needs.detect-mentions.outputs.has_system == 'true' && contains(needs.detect-mentions.outputs.agents, 'observer')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -361,7 +361,7 @@ jobs:
 
   run-video-manim:
     needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'video_manim')
+    if: needs.detect-mentions.outputs.has_system == 'true' && contains(needs.detect-mentions.outputs.agents, 'video_manim')
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -633,8 +633,8 @@ jobs:
           SHA: ${{ github.sha }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           NEEDS_JSON: ${{ toJson(needs) }}
-          BUILTIN_AGENTS: ${{ needs.detect-mentions.outputs.agents }}
-          HAS_BUILTIN: ${{ needs.detect-mentions.outputs.has_builtin }}
+          SYSTEM_AGENTS: ${{ needs.detect-mentions.outputs.agents }}
+          HAS_SYSTEM: ${{ needs.detect-mentions.outputs.has_system }}
         run: |
           set -euo pipefail
           mkdir -p artifacts/observability
@@ -691,8 +691,8 @@ jobs:
               "skipped_count": skipped_count,
             },
             "context": {
-              "has_builtin_mentions": os.getenv("HAS_BUILTIN") or "",
-              "builtin_agents": os.getenv("BUILTIN_AGENTS") or "",
+              "has_system_mentions": os.getenv("HAS_SYSTEM") or "",
+              "system_agents": os.getenv("SYSTEM_AGENTS") or "",
               "job_results": results,
             },
             "failures_topn": failures_topn,

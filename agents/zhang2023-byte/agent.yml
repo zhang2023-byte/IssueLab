@@ -4,6 +4,7 @@
 # 智能体信息
 # 智能体信息
 name: "Will's bot"              # 必需：显示名称
+agent_type: user
 owner: zhang2023-byte          # 必需：你的 GitHub ID（即用户名）
 contact: "zhangjian191@mails.ucas.ac.cn"  # 可选：联系方式
 bio: "中国科学院大学天体物理博士研究生,关注AI4S."  # 可选：个人简介
