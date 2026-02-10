@@ -34,6 +34,7 @@ __all__ = [
     "extract_mentions_from_yaml",
     "should_auto_close",
     "close_issue",
+    "get_mentions_max_count",
 ]
 
 
@@ -121,6 +122,17 @@ def _truncate_text(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[:limit]
+
+
+def get_mentions_max_count(default: int = 5) -> int:
+    """Get mention cap from response format rules."""
+    rules = _load_format_rules()
+    limits = rules.get("limits", {})
+    try:
+        value = int(limits.get("mentions_max_count", default))
+        return value if value > 0 else default
+    except Exception:
+        return default
 
 
 def _extract_sources_from_parsed_yaml(parsed: Any) -> list[str]:
@@ -362,7 +374,7 @@ def _normalize_agent_output(response_text: str, agent_name: str | None) -> tuple
     for item in actions_items:
         yaml_lines.append(f'  - "{_yaml_escape(item)}"')
     if parsed_mentions:
-        mentions_max = int(limits.get("mentions_max_count", 5))
+        mentions_max = get_mentions_max_count(default=5)
         yaml_lines.append("mentions:")
         for item in parsed_mentions[:mentions_max]:
             yaml_lines.append(f'  - "{_yaml_escape(item)}"')

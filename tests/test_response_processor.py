@@ -57,6 +57,22 @@ confidence: "low"
         assert extract_mentions_from_yaml("No mentions here") == []
 
 
+class TestResponseFormatConfig:
+    def test_get_mentions_max_count_from_rules(self, monkeypatch):
+        from issuelab import response_processor as rp
+
+        monkeypatch.setattr(rp, "_FORMAT_RULES_CACHE", None)
+        monkeypatch.setattr(rp, "_load_format_rules", lambda: {"limits": {"mentions_max_count": 7}})
+        assert rp.get_mentions_max_count(default=5) == 7
+
+    def test_get_mentions_max_count_invalid_falls_back(self, monkeypatch):
+        from issuelab import response_processor as rp
+
+        monkeypatch.setattr(rp, "_FORMAT_RULES_CACHE", None)
+        monkeypatch.setattr(rp, "_load_format_rules", lambda: {"limits": {"mentions_max_count": "oops"}})
+        assert rp.get_mentions_max_count(default=5) == 5
+
+
 class TestTriggerMentionedAgents:
     """测试触发被@的agents"""
 
