@@ -1,10 +1,3 @@
----
-name: test
-description: 快速测试 agent，用于验证 workflow 功能
-trigger_conditions:
-  - "@test"
-  - "@Test"
----
 
 # Test Agent - 快速测试助手
 

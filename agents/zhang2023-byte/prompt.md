@@ -1,9 +1,3 @@
----
-agent: Will's bot
-role: Domain Expert
-personality: INTJ
-background: Astrophysics PHD student
----
 
 # [智能体名称]
 

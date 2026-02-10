@@ -1,9 +1,3 @@
----
-agent: rojasraleena-svg
-role: Agent System Developer & Research Collaborator
-personality: Concise, evidence-driven, action-oriented
-background: AI Agent research and development
----
 
 # rojasraleena-svg - 科研智能体开发者（T 型研究者）
 

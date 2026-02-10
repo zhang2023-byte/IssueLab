@@ -3,7 +3,6 @@
 动态发现并管理系统中的所有 Agent 配置。
 """
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -15,11 +14,6 @@ AGENTS_DIR = Path(__file__).parent.parent.parent.parent / "agents"
 # 进程级缓存
 _CACHED_AGENTS: dict[str, dict[str, Any]] | None = None
 _CACHED_SIGNATURE: tuple[tuple[str, float], ...] | None = None
-
-
-def _strip_frontmatter(content: str) -> str:
-    """Remove optional YAML frontmatter from prompt markdown."""
-    return re.sub(r"^---\n.*?\n---\n", "", content, flags=re.DOTALL).strip()
 
 
 def _get_discovery_signature() -> tuple:
@@ -73,7 +67,7 @@ def discover_agents() -> dict[str, dict[str, Any]]:
                 continue
 
             prompt_content = prompt_file.read_text()
-            clean_content = _strip_frontmatter(prompt_content)
+            clean_content = prompt_content.strip()
 
             description = str(agent_config.get("description", ""))
             trigger_conditions = agent_config.get("triggers", [])

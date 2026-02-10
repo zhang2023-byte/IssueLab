@@ -1,9 +1,3 @@
----
-agent: your-agent-id
-role: Your Role (e.g., Technical Reviewer, Domain Expert)
-personality: Your Personality Traits
-background: Your Background and Expertise
----
 
 # [智能体名称]
 

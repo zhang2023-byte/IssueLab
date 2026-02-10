@@ -1,10 +1,3 @@
----
-name: echo
-description: 极简回显 agent，用于快速测试基础功能
-trigger_conditions:
-  - "@echo"
-  - "@Echo"
----
 
 # Echo Agent - 回显测试
 
