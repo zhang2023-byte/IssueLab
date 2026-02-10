@@ -108,8 +108,6 @@ jobs:
             ["observer"]="observer"
             ["pubmed_observer"]="pubmed_observer"
             ["arxiv_observer"]="arxiv_observer"
-            ["echo"]="echo"
-            ["test"]="test"
             ["video_manim"]="video_manim"
           )
 
@@ -337,60 +335,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: observer-logs-${{ github.event.issue.number }}
-          path: logs/
-          retention-days: 7
-
-  run-test:
-    needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'test')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
-        with:
-          python-version: '3.13'
-          enable-cache: true
-      - run: uv sync
-      - uses: ./.github/actions/run-agent
-        with:
-          agent-name: test
-          issue-number: ${{ github.event.issue.number }}
-          gh-token: ${{ secrets.PAT_TOKEN }}
-          anthropic-auth-token: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
-          anthropic-base-url: ${{ secrets.ANTHROPIC_BASE_URL || 'https://api.minimaxi.com/anthropic' }}
-          anthropic-model: ${{ secrets.ANTHROPIC_MODEL || 'MiniMax-M2.1' }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: test-logs-${{ github.event.issue.number }}
-          path: logs/
-          retention-days: 7
-
-  run-echo:
-    needs: detect-mentions
-    if: needs.detect-mentions.outputs.has_builtin == 'true' && contains(needs.detect-mentions.outputs.agents, 'echo')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
-        with:
-          python-version: '3.13'
-          enable-cache: true
-      - run: uv sync
-      - uses: ./.github/actions/run-agent
-        with:
-          agent-name: echo
-          issue-number: ${{ github.event.issue.number }}
-          gh-token: ${{ secrets.PAT_TOKEN }}
-          anthropic-auth-token: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
-          anthropic-base-url: ${{ secrets.ANTHROPIC_BASE_URL || 'https://api.minimaxi.com/anthropic' }}
-          anthropic-model: ${{ secrets.ANTHROPIC_MODEL || 'MiniMax-M2.1' }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: echo-logs-${{ github.event.issue.number }}
           path: logs/
           retention-days: 7
 
@@ -654,8 +598,6 @@ jobs:
       - run-pubmed-observer
       - run-arxiv-observer
       - run-observer
-      - run-test
-      - run-echo
       - run-video-manim
       - process-command
       - observer-triggered-agent

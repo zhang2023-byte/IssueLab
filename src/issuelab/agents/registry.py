@@ -21,9 +21,7 @@ AGENT_NAMES: dict[str, str] = {
     "reviewer_a": "reviewer_a",
     "reviewer_b": "reviewer_b",
     "summarizer": "summarizer",
-    "echo": "echo",
     "observer": "observer",
-    "test": "test",
     "arxiv_observer": "arxiv_observer",
     "pubmed_observer": "pubmed_observer",
     "video_manim": "video_manim",
@@ -34,12 +32,14 @@ BUILTIN_AGENTS: set[str] = {
     "reviewer_a",
     "reviewer_b",
     "summarizer",
-    "echo",
     "observer",
     "arxiv_observer",
     "pubmed_observer",
     "video_manim",
 }
+
+AGENT_TYPE_SYSTEM = "system"
+AGENT_TYPE_USER = "user"
 
 
 def normalize_agent_name(name: str) -> str:
@@ -47,6 +47,14 @@ def normalize_agent_name(name: str) -> str:
     if not name:
         return name
     return AGENT_NAMES.get(name.lower(), name)
+
+
+def _normalize_agent_type(value: Any) -> str | None:
+    if isinstance(value, str):
+        cleaned = value.strip().lower()
+        if cleaned in {AGENT_TYPE_SYSTEM, AGENT_TYPE_USER}:
+            return cleaned
+    return None
 
 
 def load_registry(agents_dir: Path, include_disabled: bool = False) -> dict[str, dict[str, Any]]:
@@ -113,7 +121,29 @@ def get_agent_config(
         return None
     root = agents_dir or Path("agents")
     registry = load_registry(root, include_disabled=include_disabled)
-    return registry.get(agent_name)
+    normalized = agent_name.lower()
+    for name, config in registry.items():
+        if str(name).lower() == normalized:
+            return config
+    return None
+
+
+def is_system_agent(
+    agent_name: str, agents_dir: Path | None = None, include_disabled: bool = True
+) -> tuple[bool, dict[str, Any] | None]:
+    """Determine whether an agent is a system agent.
+
+    Primary source of truth: agent.yml field `agent_type: system|user`.
+    Compatibility fallback: BUILTIN_AGENTS set when agent_type is absent.
+    """
+    config = get_agent_config(agent_name, agents_dir=agents_dir, include_disabled=include_disabled)
+    if config:
+        parsed = _normalize_agent_type(config.get("agent_type"))
+        if parsed is not None:
+            return parsed == AGENT_TYPE_SYSTEM, config
+
+    # Compatibility fallback for legacy configs without `agent_type`.
+    return agent_name.lower() in BUILTIN_AGENTS, config
 
 
 def is_registered_agent(

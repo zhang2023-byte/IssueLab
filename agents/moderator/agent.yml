@@ -1,5 +1,6 @@
 name: "moderator"
 owner: moderator
+agent_type: system
 description: "Issue 审核与调度代理 - 检查信息完整性，分配评审流程。"
 
 enabled: true

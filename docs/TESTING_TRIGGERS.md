@@ -398,19 +398,19 @@ def test_parse_agents_comma():
     """测试逗号分隔格式"""
     from issuelab.__main__ import parse_agents_arg
 
-    assert parse_agents_arg("echo,test") == ["echo", "test"]
+    assert parse_agents_arg("moderator,reviewer_a") == ["moderator", "reviewer_a"]
 
 def test_parse_agents_space():
     """测试空格分隔格式"""
     from issuelab.__main__ import parse_agents_arg
 
-    assert parse_agents_arg("echo test") == ["echo", "test"]
+    assert parse_agents_arg("moderator reviewer_a") == ["moderator", "reviewer_a"]
 
 def test_parse_agents_json():
     """测试 JSON 数组格式"""
     from issuelab.__main__ import parse_agents_arg
 
-    assert parse_agents_arg('["echo", "test"]') == ["echo", "test"]
+    assert parse_agents_arg('["moderator", "reviewer_a"]') == ["moderator", "reviewer_a"]
 ```
 
 #### 2. 运行 CLI 测试
@@ -553,7 +553,7 @@ gh run view <run_id> --log
 
 ```bash
 # 使用 quick 场景
-uv run python -m issuelab execute --issue 1 --agents "echo" --scene quick
+uv run python -m issuelab execute --issue 1 --agents "moderator"
 ```
 
 ---

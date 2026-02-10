@@ -1,5 +1,6 @@
 name: "observer"
 owner: observer
+agent_type: system
 description: "监控代理 - 监控 GitHub Issues，自主决定是否触发评审。"
 
 enabled: true

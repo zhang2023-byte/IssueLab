@@ -1,5 +1,6 @@
 name: "video_manim - Reproducible Video Builder"
 owner: video_manim
+agent_type: system
 description: "Generate reproducible manim scripts, render videos, audit quality, and publish traceable artifact links."
 
 enabled: true

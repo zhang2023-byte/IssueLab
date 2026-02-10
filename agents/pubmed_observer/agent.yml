@@ -1,5 +1,6 @@
 name: "pubmed_observer"
 owner: pubmed_observer
+agent_type: system
 description: "PubMed 文献推荐专家 - 从候选文献中推荐值得讨论的文献。"
 
 enabled: true

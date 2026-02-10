@@ -39,6 +39,10 @@ def _validate_agent_yml(path: Path, folder: str, errors: list[str]) -> None:
         if not data.get(key):
             _error(errors, f"Missing required field '{key}' in {path}")
 
+    agent_type = data.get("agent_type")
+    if agent_type is not None and str(agent_type).strip().lower() not in {"system", "user"}:
+        _error(errors, f"Invalid 'agent_type' in {path}: must be 'system' or 'user'")
+
     owner = str(data.get("owner", "")).strip()
     if owner and owner != folder:
         _error(errors, f"owner '{owner}' does not match folder name '{folder}' in {path}")

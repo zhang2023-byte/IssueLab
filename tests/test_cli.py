@@ -127,36 +127,36 @@ class TestParseAgentsArg:
         """Test comma-separated format."""
         from issuelab.__main__ import parse_agents_arg
 
-        result = parse_agents_arg("echo,test,moderator")
-        assert result == ["echo", "test", "moderator"]
+        result = parse_agents_arg("moderator,reviewer_a,observer")
+        assert result == ["moderator", "reviewer_a", "observer"]
 
     def test_space_separated(self):
         """Test space-separated format."""
         from issuelab.__main__ import parse_agents_arg
 
-        result = parse_agents_arg("echo test moderator")
-        assert result == ["echo", "test", "moderator"]
+        result = parse_agents_arg("moderator reviewer_a observer")
+        assert result == ["moderator", "reviewer_a", "observer"]
 
     def test_json_array(self):
         """Test JSON array format."""
         from issuelab.__main__ import parse_agents_arg
 
-        result = parse_agents_arg('["echo", "test"]')
-        assert result == ["echo", "test"]
+        result = parse_agents_arg('["moderator", "reviewer_a"]')
+        assert result == ["moderator", "reviewer_a"]
 
     def test_mixed_case(self):
         """Test that results are lowercased."""
         from issuelab.__main__ import parse_agents_arg
 
-        result = parse_agents_arg("Echo,TEST,Moderator")
-        assert result == ["echo", "test", "moderator"]
+        result = parse_agents_arg("Moderator,REVIEWER_A,Observer")
+        assert result == ["moderator", "reviewer_a", "observer"]
 
     def test_whitespace_handling(self):
         """Test whitespace is trimmed."""
         from issuelab.__main__ import parse_agents_arg
 
-        result = parse_agents_arg("  echo , test , moderator  ")
-        assert result == ["echo", "test", "moderator"]
+        result = parse_agents_arg("  moderator , reviewer_a , observer  ")
+        assert result == ["moderator", "reviewer_a", "observer"]
 
 
 class TestDispatch:

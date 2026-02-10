@@ -26,9 +26,9 @@ def parse_agents_arg(agents_str: str) -> list[str]:
 
     Args:
         agents_str: agents 字符串，支持:
-            - 逗号分隔: "echo,test"
-            - 空格分隔: "echo test"
-            - JSON 数组: '["echo", "test"]'
+            - 逗号分隔: "moderator,reviewer_a"
+            - 空格分隔: "moderator reviewer_a"
+            - JSON 数组: '["moderator", "reviewer_a"]'
 
     Returns:
         agent 名称列表（小写）

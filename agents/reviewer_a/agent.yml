@@ -1,5 +1,6 @@
 name: "reviewer_a"
 owner: reviewer_a
+agent_type: system
 description: "正面评审代理 - 可行性分析、贡献度评估、改进建议。"
 
 enabled: true

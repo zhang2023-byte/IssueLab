@@ -1,5 +1,6 @@
 name: "reviewer_b"
 owner: reviewer_b
+agent_type: system
 description: "批判性评审代理 - 漏洞识别、质疑反例、风险评估。"
 
 enabled: true

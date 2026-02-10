@@ -1,5 +1,6 @@
 name: "summarizer"
 owner: summarizer
+agent_type: system
 description: "共识汇总代理 - 共识形成、分歧梳理、行动项生成。"
 
 enabled: true

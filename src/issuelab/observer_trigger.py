@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 
-from issuelab.agents.registry import BUILTIN_AGENTS, is_registered_agent
+from issuelab.agents.registry import is_registered_agent, is_system_agent
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,8 @@ def is_builtin_agent(agent_name: str) -> bool:
     """
     if not agent_name:
         return False
-    return agent_name.lower() in BUILTIN_AGENTS
+    is_system, _ = is_system_agent(agent_name)
+    return is_system
 
 
 def trigger_builtin_agent(agent_name: str, issue_number: int) -> bool:

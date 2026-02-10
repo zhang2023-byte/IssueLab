@@ -224,7 +224,7 @@ confidence: "high"
         mock_trigger.return_value = ({}, [], [])
 
         result = process_agent_response(
-            agent_name="echo",
+            agent_name="moderator",
             response={
                 "response": """```yaml
 summary: "Test"
@@ -239,7 +239,7 @@ confidence: "high"
             issue_number=1,
         )
 
-        assert result["agent_name"] == "echo"
+        assert result["agent_name"] == "moderator"
         assert "## Summary" in result["response"]
         assert result["mentions"] == ["reviewer_b"]
 
@@ -249,7 +249,7 @@ confidence: "high"
         from issuelab.response_processor import process_agent_response
 
         result = process_agent_response(
-            agent_name="test",
+            agent_name="moderator",
             response="""```yaml
 summary: "Test"
 findings: []
@@ -271,7 +271,7 @@ confidence: "high"
         """没有mentions不触发dispatch"""
         from issuelab.response_processor import process_agent_response
 
-        result = process_agent_response(agent_name="test", response="No mentions", issue_number=1)
+        result = process_agent_response(agent_name="moderator", response="No mentions", issue_number=1)
 
         assert result["mentions"] == []
         assert result["dispatch_results"] == {}

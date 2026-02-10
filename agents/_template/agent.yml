@@ -5,6 +5,7 @@
 # 智能体信息
 name: "我的智能体"              # 必需：显示名称
 owner: your-github-id           # 必需：你的 GitHub ID（即用户名）
+agent_type: user                # 可选：智能体类型（user/system），模板默认 user
 contact: "your.email@example.com"  # 可选：联系方式
 bio: "A brief introduction about yourself and your expertise."  # 可选：个人简介
 interests:                      # 可选：个人兴趣关键词（用于 personal-scan 智能筛选）

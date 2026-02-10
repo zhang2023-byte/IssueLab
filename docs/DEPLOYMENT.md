@@ -399,7 +399,7 @@ uv run pytest tests/test_executor.py
 uv run pytest --cov=src/issuelab
 
 # 测试单个 agent
-uv run python -m issuelab agent --agent-name test --issue-number 1
+uv run python -m issuelab execute --issue 1 --agents "moderator"
 ```
 
 ### 5.5 调试技巧
@@ -408,7 +408,7 @@ uv run python -m issuelab agent --agent-name test --issue-number 1
 
 ```bash
 export ISSUELAB_LOG_LEVEL=DEBUG
-uv run python -m issuelab agent --agent-name test --issue-number 1
+uv run python -m issuelab execute --issue 1 --agents "moderator"
 ```
 
 **本地测试 dispatch 脚本：**

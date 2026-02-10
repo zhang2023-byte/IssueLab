@@ -17,7 +17,7 @@ from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions
 
 from issuelab.agents.config import AgentConfig
 from issuelab.agents.discovery import AGENTS_DIR, discover_agents
-from issuelab.agents.registry import BUILTIN_AGENTS, get_agent_config
+from issuelab.agents.registry import get_agent_config, is_system_agent
 from issuelab.config import Config
 from issuelab.logging_config import get_logger
 
@@ -63,7 +63,7 @@ def _default_feature_flags(agent_name: str | None) -> dict[str, bool]:
     - ISSUELAB_DEFAULT_ENABLE_SUBAGENTS
     - ISSUELAB_DEFAULT_ENABLE_MCP
     """
-    is_builtin = bool(agent_name and agent_name in BUILTIN_AGENTS)
+    is_builtin = bool(agent_name and is_system_agent(agent_name, agents_dir=AGENTS_DIR)[0])
     global_default = _env_flag("ISSUELAB_ENABLE_DEFAULT_FEATURES", not is_builtin)
     return {
         "enable_skills": _env_flag("ISSUELAB_DEFAULT_ENABLE_SKILLS", global_default),
@@ -89,7 +89,7 @@ def _get_agent_run_overrides(agent_name: str | None) -> dict[str, float | int]:
 
     config = get_agent_config(agent_name, agents_dir=AGENTS_DIR, include_disabled=False)
     if not config:
-        if agent_name in BUILTIN_AGENTS:
+        if is_system_agent(agent_name, agents_dir=AGENTS_DIR)[0]:
             return dict(_BUILTIN_DEFAULT_OVERRIDES)
         return {}
 

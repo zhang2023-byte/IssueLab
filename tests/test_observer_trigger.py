@@ -27,11 +27,11 @@ class TestBuiltinAgentDetection:
 
         assert is_builtin_agent("reviewer_a") is True
 
-    def test_echo_is_builtin(self):
-        """Echo应该被识别为内置agent"""
+    def test_observer_is_builtin(self):
+        """Observer应该被识别为内置agent"""
         from issuelab.observer_trigger import is_builtin_agent
 
-        assert is_builtin_agent("echo") is True
+        assert is_builtin_agent("observer") is True
 
     def test_user_agent_is_not_builtin(self):
         """用户agent不应该被识别为内置agent"""
@@ -83,7 +83,7 @@ class TestBuiltinAgentTrigger:
 
         mock_run.return_value = Mock(returncode=0)
 
-        result = trigger_builtin_agent("echo", 1)
+        result = trigger_builtin_agent("observer", 1)
 
         assert result is True
 
@@ -94,7 +94,7 @@ class TestBuiltinAgentTrigger:
 
         mock_run.side_effect = subprocess.CalledProcessError(1, "gh")
 
-        result = trigger_builtin_agent("echo", 1)
+        result = trigger_builtin_agent("observer", 1)
 
         assert result is False
 
@@ -107,7 +107,7 @@ class TestBuiltinAgentTrigger:
 
         trigger_builtin_agent("moderator", 1)
         trigger_builtin_agent("reviewer_a", 2)
-        trigger_builtin_agent("echo", 3)
+        trigger_builtin_agent("observer", 3)
 
         assert mock_run.call_count == 3
 
@@ -208,7 +208,7 @@ class TestObserverAutoTrigger:
         mock_is_builtin.return_value = True
         mock_trigger_builtin.return_value = False
 
-        result = auto_trigger_agent(agent_name="echo", issue_number=1, issue_title="Test", issue_body="Body")
+        result = auto_trigger_agent(agent_name="observer", issue_number=1, issue_title="Test", issue_body="Body")
 
         assert result is False
 

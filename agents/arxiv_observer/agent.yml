@@ -1,5 +1,6 @@
 name: "arxiv_observer"
 owner: arxiv_observer
+agent_type: system
 description: "arXiv 论文分析器 - 从候选论文中推荐值得讨论的论文。"
 
 enabled: true
