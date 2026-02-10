@@ -204,7 +204,7 @@ jobs:
           export COMMENT_BODY_FILE
           python -c "import json, os; from pathlib import Path; issue=json.loads(os.environ.get('ISSUE_BODY_JSON','\"\"')); comment=json.loads(os.environ.get('COMMENT_BODY_JSON','\"\"')); Path(os.environ['ISSUE_BODY_FILE']).write_text(issue or '', encoding='utf-8'); Path(os.environ['COMMENT_BODY_FILE']).write_text(comment or '', encoding='utf-8')"
 
-          python -m issuelab.cli.dispatch \
+          uv run python -m issuelab.cli.dispatch \
             --mentions "${{ needs.detect-mentions.outputs.user_mentions }}" \
             --agents-dir agents \
             --source-repo "${{ github.repository }}" \
