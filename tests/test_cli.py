@@ -4,6 +4,8 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from issuelab.cli.mentions import parse_github_mentions
 
 
@@ -168,40 +170,21 @@ class TestMentionsCLI:
 class TestParseAgentsArg:
     """Tests for parse_agents_arg function."""
 
-    def test_comma_separated(self):
-        """Test comma-separated format."""
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("moderator,reviewer_a,observer", ["moderator", "reviewer_a", "observer"]),
+            ("moderator reviewer_a observer", ["moderator", "reviewer_a", "observer"]),
+            ('["moderator", "reviewer_a"]', ["moderator", "reviewer_a"]),
+            ("Moderator,REVIEWER_A,Observer", ["moderator", "reviewer_a", "observer"]),
+            ("  moderator , reviewer_a , observer  ", ["moderator", "reviewer_a", "observer"]),
+        ],
+    )
+    def test_parse_agents_arg_variants(self, raw: str, expected: list[str]):
+        """支持 CSV/空格/JSON 与大小写、空白处理。"""
         from issuelab.__main__ import parse_agents_arg
 
-        result = parse_agents_arg("moderator,reviewer_a,observer")
-        assert result == ["moderator", "reviewer_a", "observer"]
-
-    def test_space_separated(self):
-        """Test space-separated format."""
-        from issuelab.__main__ import parse_agents_arg
-
-        result = parse_agents_arg("moderator reviewer_a observer")
-        assert result == ["moderator", "reviewer_a", "observer"]
-
-    def test_json_array(self):
-        """Test JSON array format."""
-        from issuelab.__main__ import parse_agents_arg
-
-        result = parse_agents_arg('["moderator", "reviewer_a"]')
-        assert result == ["moderator", "reviewer_a"]
-
-    def test_mixed_case(self):
-        """Test that results are lowercased."""
-        from issuelab.__main__ import parse_agents_arg
-
-        result = parse_agents_arg("Moderator,REVIEWER_A,Observer")
-        assert result == ["moderator", "reviewer_a", "observer"]
-
-    def test_whitespace_handling(self):
-        """Test whitespace is trimmed."""
-        from issuelab.__main__ import parse_agents_arg
-
-        result = parse_agents_arg("  moderator , reviewer_a , observer  ")
-        assert result == ["moderator", "reviewer_a", "observer"]
+        assert parse_agents_arg(raw) == expected
 
 
 class TestDispatch:
@@ -328,8 +311,9 @@ enabled: false
 class TestDispatchCLI:
     """Tests for dispatch CLI mention parsing."""
 
-    def test_parse_json_mentions(self, monkeypatch):
-        """Test parsing JSON format mentions."""
+    @pytest.mark.parametrize("mentions", ['["alice", "bob"]', "alice,bob"])
+    def test_parse_mentions_inputs(self, monkeypatch, mentions: str):
+        """支持 JSON 与 CSV mentions 输入格式。"""
         from issuelab.cli.dispatch import main
 
         # Mock environment
@@ -345,37 +329,7 @@ class TestDispatchCLI:
             result = main(
                 [
                     "--mentions",
-                    '["alice", "bob"]',
-                    "--agents-dir",
-                    str(agents_dir),
-                    "--source-repo",
-                    "test/repo",
-                    "--issue-number",
-                    "1",
-                ]
-            )
-
-            # Returns 0 even with no matches (no agents to dispatch to)
-            assert result == 0
-
-    def test_parse_csv_mentions(self, monkeypatch):
-        """Test parsing CSV format mentions."""
-        from issuelab.cli.dispatch import main
-
-        # Mock environment
-        monkeypatch.setenv("GITHUB_APP_ID", "fake_app_id")
-        monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "fake_private_key")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Create empty agents directory
-            agents_dir = Path(tmpdir)
-            agents_dir.mkdir(exist_ok=True)
-
-            # Should handle CSV format
-            result = main(
-                [
-                    "--mentions",
-                    "alice,bob",
+                    mentions,
                     "--agents-dir",
                     str(agents_dir),
                     "--source-repo",

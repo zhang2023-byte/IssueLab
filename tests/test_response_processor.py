@@ -8,10 +8,11 @@ import pytest
 class TestExtractMentionsFromYaml:
     """测试 YAML mentions 兼容层（已废弃）"""
 
-    def test_extract_mentions_list(self):
-        from issuelab.response_processor import extract_mentions_from_yaml
-
-        text = """```yaml
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            (
+                """```yaml
 summary: "Test"
 findings:
   - "A"
@@ -21,15 +22,17 @@ mentions:
   - alice
   - bob
 confidence: "high"
-```"""
-        with pytest.warns(DeprecationWarning):
-            assert extract_mentions_from_yaml(text) == ["alice", "bob"]
-
-    def test_no_yaml_mentions(self):
+```""",
+                ["alice", "bob"],
+            ),
+            ("No mentions here", []),
+        ],
+    )
+    def test_extract_mentions_compat_cases(self, text: str, expected: list[str]):
         from issuelab.response_processor import extract_mentions_from_yaml
 
         with pytest.warns(DeprecationWarning):
-            assert extract_mentions_from_yaml("No mentions here") == []
+            assert extract_mentions_from_yaml(text) == expected
 
 
 class TestResponseFormatConfig:
